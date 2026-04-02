@@ -33,9 +33,9 @@ Shark is a local-first alternative to [Eagle](https://eagle.cool/), designed for
 
 ## Supported Formats (MVP)
 
-JPG, PNG, GIF, WebP, SVG, BMP
+JPG, PNG, GIF, WebP, BMP
 
-*Post-MVP: PSD, AI, Sketch, TIFF, video, fonts*
+*Post-MVP: SVG, PSD, AI, Sketch, TIFF, video, fonts*
 
 ## Roadmap
 

@@ -33,9 +33,9 @@ Shark 是一款本地优先的素材管理工具，可替代 [Eagle](https://eag
 
 ## 支持格式（MVP）
 
-JPG、PNG、GIF、WebP、SVG、BMP
+JPG、PNG、GIF、WebP、BMP
 
-*后续计划：PSD、AI、Sketch、TIFF、视频、字体*
+*后续计划：SVG、PSD、AI、Sketch、TIFF、视频、字体*
 
 ## 路线图
 

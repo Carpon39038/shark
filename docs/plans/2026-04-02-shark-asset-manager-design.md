@@ -46,13 +46,6 @@ shark/
 ### SQLite Schema
 
 ```sql
--- Schema version tracking for migrations
-CREATE TABLE schema_version (
-    version INTEGER PRIMARY KEY,
-    applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-INSERT INTO schema_version VALUES (1);
-
 CREATE TABLE libraries (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -69,7 +62,7 @@ CREATE TABLE items (
     file_type TEXT NOT NULL,
     width INTEGER,
     height INTEGER,
-    duration REAL,
+    duration REAL,        -- reserved for video support (Post-MVP)
     color TEXT,
     tags TEXT,            -- comma-separated for MVP; migrate to tags table later
     rating INTEGER DEFAULT 0,
@@ -110,6 +103,9 @@ CREATE TABLE item_folders (
 );
 
 -- Full-text search with content sync triggers
+-- IMPORTANT: items table must NOT use WITHOUT ROWID and must NOT be rebuilt (DROP + CREATE).
+-- Doing so would corrupt the FTS5 content=items index since FTS relies on items.rowid.
+-- To rebuild items, first drop items_fts, rebuild items, then recreate items_fts and run 'rebuild'.
 CREATE VIRTUAL TABLE items_fts USING fts5(
     file_name, tags, notes,
     content=items, content_rowid=rowid
@@ -227,7 +223,7 @@ Rule of thumb: component-local state (hover, input focus, animation) stays in `u
 #[tauri::command] fn import_files(library_id: String, sources: Vec<String>, mode: ImportMode, options: ImportOptions) -> Result<ImportResult, AppError>
 
 // Thumbnails
-#[tauri::command] fn get_thumbnail(item_id: String, size: ThumbnailSize) -> Result<String, AppError>  // returns Tauri asset protocol URL, e.g. "asset://localhost/.shark/thumbs/256/abc.webp"
+#[tauri::command] fn get_thumbnail(item_id: String, size: ThumbnailSize) -> Result<String, AppError>  // returns Tauri asset protocol URL, e.g. "asset://localhost/.shark/thumbs/256/abc.jpg"
 
 // Search
 #[tauri::command] fn search_items(library_id: String, query: String, limit: i32) -> Result<Vec<SearchResult>, AppError>
@@ -249,8 +245,8 @@ All commands return `Result<T, AppError>` where `AppError` is a serializable err
 
 | Size | Generated on | Used by | Format |
 |------|-------------|---------|--------|
-| 256px | Import time | Grid view (default) | WebP, quality 80 |
-| 1024px | On-demand, background | Grid view (zoomed in), Viewer preview | WebP, quality 90 |
+| 256px | Import time | Grid view (default) | JPEG, quality 85 |
+| 1024px | On-demand, background | Grid view (zoomed in), Viewer preview | JPEG, quality 90 |
 
 ### Loading flow
 
@@ -265,13 +261,33 @@ All commands return `Result<T, AppError>` where `AppError` is a serializable err
 - LRU eviction when threshold exceeded, tracked via `generated_at` timestamp
 - Missing thumbnail on load → generate synchronously for visible items, queue for off-screen
 
+### Tauri v2 Asset Protocol
+
+Thumbnails and original images are served via Tauri's asset protocol (`convertFileSrc()`). In Tauri v2, the asset protocol requires explicit scope configuration in `tauri.conf.json`:
+
+```json
+{
+  "security": {
+    "assetProtocol": {
+      "enable": true,
+      "scope": {
+        "allow": ["**"],
+        "deny": []
+      }
+    }
+  }
+}
+```
+
+For production, scope should be restricted to library paths only. The frontend uses `convertFileSrc()` from `@tauri-apps/api` to generate accessible URLs for local file paths.
+
 ## Error Handling & Data Integrity
 
 ### Database migration
 
-- `schema_version` table tracks current version
+- Schema version tracked via `PRAGMA user_version` (built-in SQLite mechanism, no extra table needed)
 - Migrations run in `main.rs` Tauri `setup` hook, sequentially, within a transaction
-- Each migration is a numbered SQL file embedded at compile time
+- Each migration increments `user_version` and is a numbered SQL file embedded at compile time
 - On failure: rollback transaction, log error, show user dialog with option to retry or open library in safe mode
 
 ### File corruption / missing files
@@ -301,8 +317,8 @@ All commands return `Result<T, AppError>` where `AppError` is a serializable err
 
 - First import: walkdir + rayon parallel traversal, EXIF extraction
 - Incremental: notify crate for filesystem events
-- Supported formats (MVP): JPG, PNG, GIF, WebP, SVG, BMP
-- Future: PSD, AI, Sketch, TIFF, video, font
+- Supported formats (MVP): JPG, PNG, GIF, WebP, BMP
+- Future: SVG (requires resvg), PSD, AI, Sketch, TIFF, video, font
 - Thumbnail generation: image crate async, concurrency-limited
 - Color extraction: pixel sampling + clustering (see Color Extraction)
 

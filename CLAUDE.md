@@ -24,7 +24,7 @@ src-tauri/          Rust backend
     main.rs         Tauri entry, setup hooks (DB migration runs here)
     db.rs           SQLite schema, migrations, connection management
     indexer.rs      File walking (rayon parallel), EXIF extraction, filesystem monitoring
-    thumbnail.rs    Two-tier thumbnail generation (256px + 1024px, WebP)
+    thumbnail.rs    Two-tier thumbnail generation (256px + 1024px, JPEG)
     search.rs       FTS5 full-text search queries
     commands.rs     Tauri IPC command handlers (all return Result<T, AppError>)
 
@@ -58,9 +58,11 @@ Five Zustand stores split by scope. Persisted stores use localStorage. Component
 
 ### Key Design Decisions
 
+- **Schema versioning via `PRAGMA user_version`** — no separate schema_version table. Built-in SQLite mechanism, simpler and battle-tested.
 - **Tags stored as comma-separated TEXT** in items table (not normalized) — avoids JOINs for grid display, FTS5 indexes directly. Migration path to `tags` + `item_tags` tables exists for when tag analytics is needed.
 - **Smart folder rules** stored as JSON, parsed to parameterized SQL in Rust. Field names validated against an allowlist — never interpolate user input into SQL.
-- **Thumbnail two-tier system**: 256px generated at import time for grid, 1024px generated on-demand for viewer. LRU eviction at 2GB per tier.
+- **Thumbnail two-tier system**: 256px generated at import time for grid, 1024px generated on-demand for viewer. JPEG format (image crate does not support lossy WebP encoding). LRU eviction at 2GB per tier.
+- **FTS5 content=items constraint**: items table must NOT use WITHOUT ROWID or be rebuilt (DROP+CREATE), as this corrupts the FTS index.
 - **Dedup via SHA256** content hash computed in rayon thread pool during import.
 
 ## Testing
