@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="../shark-icon.png" alt="Shark" width="128" />
+</div>
+
 # Shark
 
 **[中文](../README.md)** | **English**

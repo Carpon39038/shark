@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="shark-icon.png" alt="Shark" width="128" />
+</div>
+
 # Shark
 
 为速度而生的开源素材管理器。
