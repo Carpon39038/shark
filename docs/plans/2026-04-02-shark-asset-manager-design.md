@@ -43,9 +43,21 @@ shark/
 
 ## Data Model
 
+### Database Architecture
+
+Shark uses a **global registry database** + **per-library databases** approach:
+
+- **Global registry DB** (`~/.shark/registry.db`): Stores the `libraries` table — a catalog of all registered libraries (name, path). Managed by the app-level `DbState`.
+- **Per-library DB** (`<library_path>/.shark/metadata.db`): Stores all library-specific data — `items`, `folders`, `smart_folders`, `thumbnails`, `items_fts`, etc. When a library is opened, the app switches the active DB connection to that library's `metadata.db`.
+
+This means `items.library_id` is used for filtering within a single-library context, not for cross-library JOINs. Each library's DB is self-contained.
+
+> **Schema note:** The `libraries` table exists in the global registry DB only. Per-library DBs contain `items`, `folders`, `smart_folders`, `thumbnails`, and `items_fts`. The `items.library_id` field is retained as a simple text identifier (no foreign key to `libraries`) since the per-library DB has no `libraries` table.
+
 ### SQLite Schema
 
 ```sql
+-- Global registry DB (registry.db)
 CREATE TABLE libraries (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -53,9 +65,10 @@ CREATE TABLE libraries (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Per-library DB (metadata.db)
 CREATE TABLE items (
     id TEXT PRIMARY KEY,
-    library_id TEXT NOT NULL REFERENCES libraries(id),
+    library_id TEXT NOT NULL,  -- identifier for filtering; no FK (libraries table is in global DB)
     file_path TEXT NOT NULL,
     file_name TEXT NOT NULL,
     file_size INTEGER,
@@ -83,7 +96,7 @@ CREATE UNIQUE INDEX idx_items_library_path ON items(library_id, file_path);
 
 CREATE TABLE smart_folders (
     id TEXT PRIMARY KEY,
-    library_id TEXT NOT NULL REFERENCES libraries(id),
+    library_id TEXT NOT NULL,  -- no FK (libraries table is in global DB)
     name TEXT NOT NULL,
     rules TEXT NOT NULL,   -- JSON-serialized filter rules (see Smart Folder Rules)
     parent_id TEXT REFERENCES smart_folders(id)
@@ -91,7 +104,7 @@ CREATE TABLE smart_folders (
 
 CREATE TABLE folders (
     id TEXT PRIMARY KEY,
-    library_id TEXT NOT NULL REFERENCES libraries(id),
+    library_id TEXT NOT NULL,  -- no FK (libraries table is in global DB)
     name TEXT NOT NULL,
     parent_id TEXT REFERENCES folders(id),
     sort_order INTEGER DEFAULT 0
@@ -208,6 +221,8 @@ Rule of thumb: component-local state (hover, input focus, animation) stays in `u
 
 ## IPC Interface (Tauri Commands)
 
+> **Note:** All command signatures below show the logical interface (what the frontend calls). In implementation, every command also takes a `state: State<'_, DbState>` parameter for Tauri state management, which is omitted here for clarity.
+
 ```rust
 // Library management
 #[tauri::command] fn create_library(name: String, path: String) -> Result<Library, AppError>
@@ -216,15 +231,15 @@ Rule of thumb: component-local state (hover, input focus, animation) stays in `u
 
 // Item queries
 #[tauri::command] fn query_items(library_id: String, filter: ItemFilter, sort: SortSpec, page: Pagination) -> Result<ItemPage, AppError>
-#[tauri::command] fn get_item_detail(item_id: String) -> Result<ItemDetail, AppError>
+#[tauri::command] fn get_item_detail(item_id: String) -> Result<Item, AppError>  // Phase 1 returns Item; future phases may add EXIF/metadata for an extended ItemDetail type
 #[tauri::command] fn update_item(item_id: String, updates: ItemUpdates) -> Result<(), AppError>
 #[tauri::command] fn delete_items(item_ids: Vec<String>, permanent: bool) -> Result<(), AppError>
 
 // Import
-#[tauri::command] fn import_files(library_id: String, sources: Vec<String>, mode: ImportMode, options: ImportOptions) -> Result<ImportResult, AppError>
+#[tauri::command] fn import_files(library_id: String, sources: Vec<String>, mode: ImportMode, options: ImportOptions) -> Result<ImportResult, AppError>  // Phase 1 simplifies to: import_files(library_id: String, source_path: String) — single source, copy mode only. Full signature deferred to Phase 3.
 
 // Thumbnails
-#[tauri::command] fn get_thumbnail(item_id: String, size: ThumbnailSize) -> Result<String, AppError>  // returns Tauri asset protocol URL, e.g. "asset://localhost/.shark/thumbs/256/abc.jpg"
+#[tauri::command] fn get_thumbnail(item_id: String, size: ThumbnailSize) -> Result<String, AppError>  // returns local file path; frontend converts via convertFileSrc()
 
 // Search
 #[tauri::command] fn search_items(library_id: String, query: String, limit: i32) -> Result<Vec<SearchResult>, AppError>

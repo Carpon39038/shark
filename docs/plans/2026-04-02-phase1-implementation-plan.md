@@ -91,6 +91,7 @@ pub enum AppError {
 **models.rs:**
 - `Library` { id, name, path, created_at }
 - `Item` { id, library_id, file_path, file_name, file_size, file_type, width, height, tags, rating, notes, sha256, status, created_at, modified_at }
+- `Folder` { id, library_id, name, parent_id, sort_order }
 - `ItemFilter` { folder_id, file_types, rating_min, search_query }
 - `SortSpec` { field, direction }
 - `Pagination` { page, page_size }
@@ -120,15 +121,17 @@ SQLite schema, migrations, connection management.
 **Connection management:**
 - `init_db(path: &Path) -> Result<Connection>` — open, WAL, foreign_keys, synchronous=NORMAL
 - Connection wrapped in `Mutex<Connection>` managed via Tauri state
+- **Database architecture:** Global registry DB (`~/.shark/registry.db`) stores the `libraries` table (catalog of all libraries). Per-library DB (`<library_path>/.shark/metadata.db`) stores items, folders, thumbnails, FTS data. When a library is opened, the active `DbState` connection switches to that library's DB. `items.library_id` is for filtering within a single library, not cross-library JOINs.
 
 **Migrations (V1):**
-Full schema from design doc:
-- `libraries` table
-- `items` table + indexes (library_id, file_type, rating, created_at, sha256), UNIQUE(library_id, file_path) constraint to prevent duplicate imports at DB level
-- `folders`, `item_folders` tables
-- `smart_folders` table
-- `thumbnails` table
-- `items_fts` FTS5 virtual table + sync triggers (items_ai, items_ad, items_au)
+Schema split between two DBs:
+- **Global registry DB** (`~/.shark/registry.db`): `libraries` table
+- **Per-library DB** (`<library_path>/.shark/metadata.db`):
+  - `items` table + indexes (library_id, file_type, rating, created_at, sha256), UNIQUE(library_id, file_path) constraint. Note: `library_id` is a plain text field, no FK to `libraries` (that table is in the global DB).
+  - `folders`, `item_folders` tables
+  - `smart_folders` table
+  - `thumbnails` table
+  - `items_fts` FTS5 virtual table + sync triggers (items_ai, items_ad, items_au)
 
 Migration uses `user_version` pragma for version tracking.
 
@@ -323,10 +326,9 @@ Wire everything together in Tauri setup.
 fn main() {
     Builder::default()
         .setup(|app| {
-            // 1. Resolve app data dir
-            // 2. Open global DB (library registry)
-            // 3. Run migrations
-            // 4. Manage DbState
+            // 1. Resolve app data dir (~/.shark/)
+            // 2. Open global registry DB (~/.shark/registry.db), run migrations for `libraries` table
+            // 3. Manage DbState (starts as registry DB; switches to library DB when a library is opened)
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
