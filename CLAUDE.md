@@ -64,6 +64,8 @@ Five Zustand stores split by scope. Persisted stores use localStorage. Component
 - **Smart folder rules** stored as JSON, parsed to parameterized SQL in Rust. Field names validated against an allowlist — never interpolate user input into SQL.
 - **Thumbnail two-tier system**: 256px generated at import time for grid, 1024px generated on-demand for viewer. JPEG format (image crate does not support lossy WebP encoding). LRU eviction at 2GB per tier.
 - **FTS5 content=items constraint**: items table must NOT use WITHOUT ROWID or be rebuilt (DROP+CREATE), as this corrupts the FTS index.
+- **FTS5 search semantics**: Phase 1 uses OR for multi-token queries (broad matching suitable for image search). AND toggle deferred to Phase 2.
+- **Batch thumbnail RPC**: `get_thumbnails_batch` takes a Vec of item IDs and returns HashMap<String, String> — one IPC call for the grid instead of N individual calls.
 - **Dedup via SHA256** content hash computed in rayon thread pool during import.
 - **DbState dual-connection architecture** — `registry: Mutex<Connection>` (always connected to `~/.shark/registry.db`) + `library: Mutex<Option<Connection>>` (connected to active library's `metadata.db`). Registry operations never block during library switches.
 

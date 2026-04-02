@@ -102,6 +102,7 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.31", features = ["bundled", "fts5"] }
+chrono = { version = "0.4", features = ["serde"] }
 image = "0.25"
 rayon = "1.10"
 walkdir = "2"
@@ -151,7 +152,7 @@ Create `src-tauri/tauri.conf.json`:
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; img-src 'self' asset: https://asset.localhost",
       "assetProtocol": {
         "enable": true,
         "scope": {
@@ -1179,6 +1180,20 @@ pub fn create_library(
         "INSERT INTO libraries (id, name, path) VALUES (?1, ?2, ?3)",
         params![id, name, path],
     )?;
+
+    // Initialize library directory structure + metadata.db immediately
+    let lib_path = Path::new(path);
+    std::fs::create_dir_all(lib_path.join("images"))?;
+    std::fs::create_dir_all(lib_path.join(".shark").join("thumbs").join("256"))?;
+    std::fs::create_dir_all(lib_path.join(".shark").join("thumbs").join("1024"))?;
+
+    // Initialize the per-library metadata.db
+    let db_path = lib_path.join(".shark").join("metadata.db");
+    {
+        let lib_conn = init_library_db(&db_path)?;
+        drop(lib_conn); // Run migrations and release — will be reopened on open_library
+    }
+
     Ok(Library {
         id,
         name: name.to_string(),
@@ -1406,71 +1421,10 @@ pub fn query_items(
     })
 }
 
-// ── FTS Search ───────────────────────────────────────────────
-
-pub fn search_items(
-    conn: &Connection,
-    query: &str,
-    limit: i64,
-) -> Result<Vec<SearchResult>, AppError> {
-    let query = query.trim();
-    if query.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let sanitized: String = query
-        .chars()
-        .filter(|c| c.is_alphanumeric() || *c == ' ' || *c == '_')
-        .collect::<String>()
-        .split_whitespace()
-        .map(|token| format!("{}*", token))
-        .collect::<Vec<_>>()
-        .join(" OR ");
-
-    if sanitized.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let mut stmt = conn.prepare(
-        "SELECT items.id, items.file_path, items.file_name, items.file_size, items.file_type,
-                items.width, items.height, items.color, items.tags, items.rating,
-                items.notes, items.sha256, items.status, items.created_at, items.modified_at,
-                items_fts.rank
-         FROM items_fts
-         JOIN items ON items.rowid = items_fts.rowid
-         WHERE items_fts MATCH ?1
-         ORDER BY items_fts.rank
-         LIMIT ?2",
-    )?;
-    let results = stmt
-        .query_map(params![sanitized, limit], |row| {
-            Ok(SearchResult {
-                item: Item {
-                    id: row.get(0)?,
-                    file_path: row.get(1)?,
-                    file_name: row.get(2)?,
-                    file_size: row.get(3)?,
-                    file_type: row.get(4)?,
-                    width: row.get(5)?,
-                    height: row.get(6)?,
-                    color: row.get(7)?,
-                    tags: row.get(8)?,
-                    rating: row.get(9)?,
-                    notes: row.get(10)?,
-                    sha256: row.get(11)?,
-                    status: row.get(12)?,
-                    created_at: row.get(13)?,
-                    modified_at: row.get(14)?,
-                },
-                rank: row.get(15)?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-
-    Ok(results)
-}
-
 // ── Tags ─────────────────────────────────────────────────────
+// NOTE: FTS5 search is handled by search.rs module — db.rs does NOT define
+// search_items(). This avoids duplication and ensures all search logic lives
+// in one place. The db.rs module only handles schema, migrations, and CRUD.
 
 pub fn get_all_tags(conn: &Connection) -> Result<Vec<String>, AppError> {
     let mut stmt = conn.prepare("SELECT DISTINCT tags FROM items WHERE tags != ''")?;
@@ -1740,7 +1694,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ── FTS search ───────────────────────────────────────────
+    // ── FTS search (via search module) ────────────────────────
 
     #[test]
     fn test_fts_search_by_filename() {
@@ -1759,7 +1713,7 @@ mod tests {
         insert_item(&conn, &item1).unwrap();
         insert_item(&conn, &item2).unwrap();
 
-        let results = search_items(&conn, "sunset", 10).unwrap();
+        let results = crate::search::search_items(&conn, "sunset", 10).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].item.file_name, "sunset_beach.jpg");
     }
@@ -1779,7 +1733,7 @@ mod tests {
         insert_item(&conn, &item1).unwrap();
         insert_item(&conn, &item2).unwrap();
 
-        let results = search_items(&conn, "nature", 10).unwrap();
+        let results = crate::search::search_items(&conn, "nature", 10).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].item.id, "item-1");
     }
@@ -1802,11 +1756,11 @@ mod tests {
         .unwrap();
 
         // FTS should reflect the new name
-        let results = search_items(&conn, "new_name", 10).unwrap();
+        let results = crate::search::search_items(&conn, "new_name", 10).unwrap();
         assert_eq!(results.len(), 1);
 
         // Old name should not match
-        let old_results = search_items(&conn, "old_name", 10).unwrap();
+        let old_results = crate::search::search_items(&conn, "old_name", 10).unwrap();
         assert_eq!(old_results.len(), 0);
     }
 
@@ -2403,7 +2357,6 @@ use sha2::{Digest, Sha256};
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 const IMAGE_EXTENSIONS: &[&str] = &[
@@ -2445,49 +2398,7 @@ fn get_file_type(path: &Path) -> String {
 }
 
 fn now_iso8601() -> String {
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    // Simple ISO-8601-like format without chrono dependency
-    let secs = duration.as_secs();
-    let days = secs / 86400;
-    // Calculate year, month, day from days since epoch
-    let (year, month, day) = days_to_ymd(days);
-    let time_secs = secs % 86400;
-    let hours = time_secs / 3600;
-    let minutes = (time_secs % 3600) / 60;
-    let seconds = time_secs % 60;
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        year, month, day, hours, minutes, seconds
-    )
-}
-
-fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
-    let mut year = 1970u64;
-    loop {
-        let year_days = if is_leap(year) { 366 } else { 365 };
-        if days < year_days {
-            break;
-        }
-        days -= year_days;
-        year += 1;
-    }
-    let leap = is_leap(year);
-    let month_days = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    let mut month = 0u64;
-    for &md in &month_days {
-        if days < md {
-            break;
-        }
-        days -= md;
-        month += 1;
-    }
-    (year, month + 1, days + 1)
-}
-
-fn is_leap(year: u64) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+    chrono::Utc::now().to_rfc3339()
 }
 
 struct ProcessedFile {
@@ -2632,7 +2543,7 @@ pub fn import_directory(
 }
 ```
 
-**Note:** Timestamps use a simple `SystemTime`-based helper instead of the `chrono` crate — no extra dependency needed.
+**Note:** Timestamps use `chrono::Utc::now().to_rfc3339()` for reliable ISO-8601 formatting with proper timezone handling.
 
 ---
 
@@ -2820,6 +2731,12 @@ use crate::error::AppError;
 use crate::models::{Item, SearchResult};
 use rusqlite::params;
 
+/// FTS5 full-text search with prefix matching.
+///
+/// **Search semantics (Phase 1):** Multi-token queries use OR — "sunset beach"
+/// matches items containing EITHER word. This provides broad matching suitable
+/// for image search. AND semantics (both words required) can be added as a
+/// toggle in Phase 2 if users request stricter matching.
 pub fn search_items(
     conn: &rusqlite::Connection,
     query: &str,
@@ -3121,6 +3038,73 @@ pub fn get_thumbnail(
     Ok(thumb_path.to_string_lossy().to_string())
 }
 
+/// Batch thumbnail fetch — returns thumbnail paths for multiple items in a single IPC call.
+/// Replaces N individual get_thumbnail calls with one batched call for grid performance.
+#[tauri::command]
+pub fn get_thumbnails_batch(
+    item_ids: Vec<String>,
+    size: ThumbnailSize,
+    state: State<'_, DbState>,
+) -> Result<std::collections::HashMap<String, String>, AppError> {
+    let library_conn = state.library.lock().map_err(|e| AppError::Database(e.to_string()))?;
+    let conn = library_conn.as_ref().ok_or(AppError::NoActiveLibrary)?;
+
+    let mut result = std::collections::HashMap::new();
+
+    for item_id in item_ids {
+        // Look up thumbnail path directly from thumbnails table
+        let thumb_path: Option<String> = conn
+            .query_row(
+                "SELECT CASE
+                    WHEN ?2 = 'S256' THEN t.thumb_256_path
+                    ELSE t.thumb_1024_path
+                 END
+                 FROM thumbnails t
+                 WHERE t.item_id = ?1",
+                rusqlite::params![item_id, format!("{:?}", size)],
+                |row| row.get(0),
+            )
+            .ok()
+            .flatten();
+
+        if let Some(path) = thumb_path {
+            if std::path::Path::new(&path).exists() {
+                result.insert(item_id, path);
+                continue;
+            }
+        }
+
+        // Fallback: derive path from item file_path (thumbnails may not be in DB yet)
+        if let Ok(item) = db::get_item(conn, &item_id) {
+            let lib_path = std::path::Path::new(&item.file_path)
+                .parent()
+                .and_then(|p| p.parent())
+                .map(|p| p.to_path_buf())
+                .unwrap_or_default();
+
+            let thumb_dir = lib_path.join(".shark").join("thumbs").join(size.subdir());
+            let thumb_path = thumb_dir.join(format!("{}.jpg", item_id));
+
+            if thumb_path.exists() {
+                result.insert(item_id, thumb_path.to_string_lossy().to_string());
+            } else if matches!(size, ThumbnailSize::S1024) {
+                // Generate on-demand for 1024px
+                let _ = std::fs::create_dir_all(&thumb_dir);
+                if crate::thumbnail::generate_thumbnail(
+                    std::path::Path::new(&item.file_path),
+                    &thumb_dir,
+                    &item_id,
+                    size.pixel_size(),
+                ).is_ok() {
+                    result.insert(item_id, thumb_path.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+
+    Ok(result)
+}
+
 #[tauri::command]
 pub fn search_items_cmd(
     library_id: String,
@@ -3226,6 +3210,7 @@ fn main() {
             commands::get_item_detail,
             commands::delete_items,
             commands::get_thumbnail,
+            commands::get_thumbnails_batch,
             commands::search_items_cmd,
             commands::get_folders,
         ])
@@ -3242,9 +3227,9 @@ fn main() {
 
 ---
 
-### Step 3: Update `tauri.conf.json` with asset protocol
+### Step 3: Verify `tauri.conf.json` asset protocol
 
-Update the `app.security` section in `src-tauri/tauri.conf.json`:
+The `tauri.conf.json` was already configured with correct CSP and asset protocol in Task 1. Verify the security section looks correct:
 
 ```json
 "security": {
@@ -3258,6 +3243,8 @@ Update the `app.security` section in `src-tauri/tauri.conf.json`:
     }
 }
 ```
+
+No changes needed — this step is a verification check only.
 
 ---
 
@@ -3696,8 +3683,8 @@ interface FilterState {
   fileTypes: string[];
   ratingMin: number;
   folderId: string | null;
-  page: number;
-  pageSize: number;
+  offset: number;
+  limit: number;
 
   // Actions
   setSortBy: (field: string) => void;
@@ -4489,6 +4476,10 @@ interface AssetCardProps {
   thumbPath: string | null;
 }
 
+// Performance note: React.memo's shallow comparison ensures only cards whose
+// props actually changed re-render. When setThumbMap creates a new Map, only
+// the card whose thumbPath changed from null→path will re-render — others skip.
+// This is critical for grid performance with 1000+ items.
 export const AssetCard = memo(function AssetCard({
   item,
   selected,
@@ -4756,36 +4747,26 @@ Add a thumbnail cache hook that fetches thumbnail paths for visible items.
 
 **File: `src/hooks/useThumbnails.ts`**
 ```typescript
-import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { ThumbnailSize } from '../lib/types';
 
 /**
  * Batch-fetch thumbnail paths for a list of item IDs.
+ * Uses the batch RPC endpoint for efficiency — one IPC call instead of N.
  * Returns a Map of itemId -> thumbnail file path.
  */
 export async function fetchThumbnailPaths(
   itemIds: string[],
   size: ThumbnailSize = ThumbnailSize.S256,
 ): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
+  if (itemIds.length === 0) return new Map();
 
-  // Fetch in parallel with concurrency limit of 10
-  const batchSize = 10;
-  for (let i = 0; i < itemIds.length; i += batchSize) {
-    const batch = itemIds.slice(i, i + batchSize);
-    const results = await Promise.allSettled(
-      batch.map((id) => invoke<string>('get_thumbnail', { itemId: id, size })),
-    );
+  const result = await invoke<Record<string, string>>('get_thumbnails_batch', {
+    itemIds,
+    size,
+  });
 
-    results.forEach((result, idx) => {
-      if (result.status === 'fulfilled') {
-        map.set(batch[idx], result.value);
-      }
-    });
-  }
-
-  return map;
+  return new Map(Object.entries(result));
 }
 ```
 
@@ -5338,7 +5319,9 @@ console.log(lib);
 - [ ] `lib.id` is a valid UUID string
 - [ ] `lib.name` is "Photo Library"
 - [ ] `lib.path` is "/tmp/shark-test-library"
-- [ ] `/tmp/shark-test-library/.shark/metadata.db` exists on disk
+- [ ] `/tmp/shark-test-library/.shark/metadata.db` exists on disk (created by create_library, not just open_library)
+- [ ] `/tmp/shark-test-library/images/` directory exists
+- [ ] `/tmp/shark-test-library/.shark/thumbs/256/` directory exists
 - [ ] Sidebar dropdown now shows "Photo Library"
 - [ ] `~/.shark/registry.db` exists
 

@@ -215,11 +215,13 @@ Walk directories, hash files, copy to library, generate thumbnails, write metada
 **Main function:**
 ```rust
 pub fn import_directory(
-    conn: &Mutex<Connection>,
+    conn: &Connection,
     library_path: &Path,
     source_path: &Path,
 ) -> Result<ImportResult>
 ```
+
+**Note:** Takes `&Connection` directly (not `&Mutex<Connection>`). The rayon parallel phase does not need the DB lock — files are processed in parallel, then results are inserted sequentially using the connection. The caller (commands.rs) acquires the Mutex lock and passes the inner `&Connection`.
 
 **Pipeline (per file, parallelized via rayon):**
 1. `walkdir::WalkDir` collects all image files recursively
@@ -228,7 +230,7 @@ pub fn import_directory(
    - Copy file to `library/images/{uuid}.{ext}`
    - Extract dimensions via `image` crate
    - Generate 256px thumbnail
-3. Collect rayon results into `Vec`, then under a single Mutex lock: check for duplicates and batch insert into DB sequentially
+3. Collect rayon results into `Vec`, then sequentially: check for duplicates and batch insert into DB
 
 **Phase 1 constraints:**
 - Copy mode only (no move/reference)
@@ -266,6 +268,7 @@ pub fn search_items(
 
 - Joins `items_fts` with `items` table to return full Item data
 - Uses FTS5 `MATCH` with prefix support (`query*`)
+- **Phase 1 search semantics:** Multi-token queries use OR (e.g., "sunset beach" matches items with EITHER word). Broad matching is suitable for image search. AND semantics can be added as a toggle in Phase 2.
 - Returns items ranked by FTS5 relevance
 - Validates/sanitizes query to prevent FTS5 syntax errors
 - Basic search by file_name, tags, notes (as defined by FTS5 columns)
@@ -301,6 +304,7 @@ Expose Rust functions as Tauri commands callable from frontend.
 #[tauri::command] fn get_item_detail(item_id: String, state: State<'_, DbState>) -> Result<Item, AppError>
 #[tauri::command] fn delete_items(item_ids: Vec<String>, permanent: bool, state: State<'_, DbState>) -> Result<(), AppError>
 #[tauri::command] fn get_thumbnail(item_id: String, size: ThumbnailSize, state: State<'_, DbState>) -> Result<String, AppError>  // returns local file path; frontend converts via convertFileSrc()
+#[tauri::command] fn get_thumbnails_batch(item_ids: Vec<String>, size: ThumbnailSize, state: State<'_, DbState>) -> Result<HashMap<String, String>, AppError>  // batch version — one IPC call for grid thumbnails instead of N calls
 #[tauri::command] fn search_items(library_id: String, query: String, limit: i32, state: State<'_, DbState>) -> Result<Vec<SearchResult>, AppError>
 #[tauri::command] fn get_folders(library_id: String, state: State<'_, DbState>) -> Result<Vec<Folder>, AppError>  // flat list for sidebar; tree nesting deferred to Phase 2
 ```
