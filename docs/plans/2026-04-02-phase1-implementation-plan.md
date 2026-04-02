@@ -155,7 +155,7 @@ Migration uses `user_version` pragma for version tracking.
 ## Step 4: Thumbnail Generation (thumbnail.rs)
 
 ### What
-Generate 256px WebP thumbnails from source images.
+Generate 256px JPEG thumbnails from source images.
 
 ### Files
 - `src-tauri/src/thumbnail.rs`
@@ -213,13 +213,12 @@ pub fn import_directory(
 
 **Pipeline (per file, parallelized via rayon):**
 1. `walkdir::WalkDir` collects all image files recursively
-2. `rayon::par_iter` processes files in parallel:
+2. `rayon::par_iter` processes files in parallel (no DB lock held during this phase):
    - Compute SHA256 hash (`sha2` crate)
-   - Check for duplicates (query sha256 index)
    - Copy file to `library/images/{uuid}.{ext}`
    - Extract dimensions via `image` crate
    - Generate 256px thumbnail
-3. Batch insert items into DB (single-threaded, inside Mutex lock)
+3. Collect rayon results into `Vec`, then under a single Mutex lock: check for duplicates and batch insert into DB sequentially
 
 **Phase 1 constraints:**
 - Copy mode only (no move/reference)
@@ -236,38 +235,7 @@ pub fn import_directory(
 
 ---
 
-## Step 6: Tauri IPC Commands (commands.rs)
-
-### What
-Expose Rust functions as Tauri commands callable from frontend.
-
-### Files
-- `src-tauri/src/commands.rs`
-
-### Commands (Phase 1 scope)
-```rust
-#[tauri::command] fn create_library(name: String, path: String, state: State<'_, DbState>) -> Result<Library, AppError>
-#[tauri::command] fn open_library(path: String, state: State<'_, DbState>) -> Result<Library, AppError>
-#[tauri::command] fn list_libraries(state: State<'_, DbState>) -> Result<Vec<Library>, AppError>
-#[tauri::command] fn import_files(library_id: String, source_path: String, state: State<'_, DbState>) -> Result<ImportResult, AppError>
-#[tauri::command] fn query_items(library_id: String, filter: ItemFilter, sort: SortSpec, page: Pagination, state: State<'_, DbState>) -> Result<ItemPage, AppError>
-#[tauri::command] fn get_item_detail(item_id: String, state: State<'_, DbState>) -> Result<Item, AppError>
-#[tauri::command] fn delete_items(item_ids: Vec<String>, permanent: bool, state: State<'_, DbState>) -> Result<(), AppError>
-#[tauri::command] fn get_thumbnail_path(item_id: String, size: ThumbnailSize, state: State<'_, DbState>) -> Result<String, AppError>
-#[tauri::command] fn search_items(library_id: String, query: String, limit: i32, state: State<'_, DbState>) -> Result<Vec<SearchResult>, AppError>
-```
-
-Each command:
-- Takes `State<'_, DbState>` parameter
-- Delegates to db.rs / indexer.rs / thumbnail.rs
-- Returns `Result<T, AppError>` (AppError auto-serialized)
-
-### Verification
-`pnpm tauri dev` — can invoke commands from browser console.
-
----
-
-## Step 6b: Search Module (search.rs)
+## Step 6: Search Module (search.rs)
 
 ### What
 FTS5 full-text search backend. Phase 1 already creates the FTS5 virtual table and sync triggers in db.rs — this module provides the query interface so that infrastructure isn't wasted.
@@ -300,17 +268,43 @@ pub fn search_items(
 - `test_empty_query` — verify empty results for empty/whitespace query
 - `test_no_results` — verify empty results for non-matching query
 
-### Add to commands.rs
-```rust
-#[tauri::command] fn search_items(library_id: String, query: String, limit: i32, state: State<'_, DbState>) -> Result<Vec<SearchResult>, AppError>
-```
-
 ### Verification
-`cargo test` passes search tests. Search command callable from frontend.
+`cargo test` passes search tests.
 
 ---
 
-## Step 7: Main Assembly (main.rs)
+## Step 7: Tauri IPC Commands (commands.rs)
+
+### What
+Expose Rust functions as Tauri commands callable from frontend.
+
+### Files
+- `src-tauri/src/commands.rs`
+
+### Commands (Phase 1 scope)
+```rust
+#[tauri::command] fn create_library(name: String, path: String, state: State<'_, DbState>) -> Result<Library, AppError>
+#[tauri::command] fn open_library(path: String, state: State<'_, DbState>) -> Result<Library, AppError>
+#[tauri::command] fn list_libraries(state: State<'_, DbState>) -> Result<Vec<Library>, AppError>
+#[tauri::command] fn import_files(library_id: String, source_path: String, state: State<'_, DbState>) -> Result<ImportResult, AppError>
+#[tauri::command] fn query_items(library_id: String, filter: ItemFilter, sort: SortSpec, page: Pagination, state: State<'_, DbState>) -> Result<ItemPage, AppError>
+#[tauri::command] fn get_item_detail(item_id: String, state: State<'_, DbState>) -> Result<Item, AppError>
+#[tauri::command] fn delete_items(item_ids: Vec<String>, permanent: bool, state: State<'_, DbState>) -> Result<(), AppError>
+#[tauri::command] fn get_thumbnail_path(item_id: String, size: ThumbnailSize, state: State<'_, DbState>) -> Result<String, AppError>
+#[tauri::command] fn search_items(library_id: String, query: String, limit: i32, state: State<'_, DbState>) -> Result<Vec<SearchResult>, AppError>
+```
+
+Each command:
+- Takes `State<'_, DbState>` parameter
+- Delegates to db.rs / indexer.rs / thumbnail.rs / search.rs
+- Returns `Result<T, AppError>` (AppError auto-serialized)
+
+### Verification
+`pnpm tauri dev` — can invoke commands from browser console.
+
+---
+
+## Step 8: Main Assembly (main.rs)
 
 ### What
 Wire everything together in Tauri setup.
@@ -359,7 +353,7 @@ Window config in `tauri.conf.json`:
 
 ---
 
-## Step 8: Frontend Foundation (types + hooks + stores)
+## Step 9: Frontend Foundation (types + hooks + stores)
 
 ### What
 TypeScript types, IPC hook, and all 5 Zustand stores.
@@ -393,7 +387,7 @@ App compiles and renders. Stores initialize correctly.
 
 ---
 
-## Step 9: App Layout + Toolbar
+## Step 10: App Layout + Toolbar
 
 ### What
 Main layout structure and top toolbar.
@@ -414,7 +408,7 @@ App renders with toolbar. Import button opens native file dialog.
 
 ---
 
-## Step 10: Sidebar
+## Step 11: Sidebar
 
 ### What
 Library selector + basic folder list.
@@ -435,7 +429,7 @@ Sidebar shows library list. Clicking folder filters grid.
 
 ---
 
-## Step 11: Virtual Grid (Core UI)
+## Step 12: Virtual Grid (Core UI)
 
 ### What
 The main grid with virtual scrolling, thumbnail loading, selection.
@@ -470,7 +464,7 @@ Import a folder of 100+ images. Grid scrolls smoothly at 60fps.
 
 ---
 
-## Step 12: Image Viewer
+## Step 13: Image Viewer
 
 ### What
 Full-screen single image viewer.
@@ -491,13 +485,13 @@ Double-click grid item → viewer opens with full image. Arrow keys navigate. ES
 
 ---
 
-## Step 13: Import Flow
+## Step 14: Import Flow
 
 ### What
 End-to-end import UX with progress feedback.
 
 ### Files
-- `src/components/Import/ImportButton.tsx` (enhanced with progress feedback from Step 9's basic version)
+- `src/components/Import/ImportButton.tsx` (enhanced with progress feedback from Step 10's basic version)
 - `src/components/Import/ImportProgress.tsx`
 
 ### Details
@@ -511,7 +505,7 @@ Select folder with images → import runs → grid shows new items.
 
 ---
 
-## Step 14: End-to-End Verification
+## Step 15: End-to-End Verification
 
 ### What
 Manual smoke test + performance baseline.
@@ -537,19 +531,18 @@ Manual smoke test + performance baseline.
 Step 1 (scaffold)
   └─→ Step 2 (error+models)
        └─→ Step 3 (db.rs)
-            ├─→ Step 4 (thumbnail.rs)
-            │    └─→ Step 5 (indexer.rs)
-            │         └─→ Step 6 (commands.rs)
-            │              └─→ Step 6b (search.rs)
-            │                   └─→ Step 7 (main.rs)
-            └─→ Step 6 (commands.rs)
-  └─→ Step 8 (frontend foundation)
-       └─→ Step 9 (layout+toolbar)
-            ├─→ Step 11 (virtual grid)
-            │    ├─→ Step 10 (sidebar) ← needs grid for folder-filter verification
-            │    └─→ Step 12 (viewer)
-            └─→ Step 13 (import flow)
-                 └─→ Step 14 (E2E verification)
+            └─→ Step 4 (thumbnail.rs)
+                 └─→ Step 5 (indexer.rs)
+                      └─→ Step 6 (search.rs)
+                           └─→ Step 7 (commands.rs)
+                                └─→ Step 8 (main.rs)
+  └─→ Step 9 (frontend foundation)
+       └─→ Step 10 (layout+toolbar)
+            ├─→ Step 12 (virtual grid)
+            │    ├─→ Step 11 (sidebar) ← needs grid for folder-filter verification
+            │    └─→ Step 13 (viewer)
+            └─→ Step 14 (import flow)
+                 └─→ Step 15 (E2E verification)
 ```
 
 ## Estimated Complexity
@@ -561,13 +554,13 @@ Step 1 (scaffold)
 | 3. DB Layer | 1 | Medium | FTS5 trigger correctness |
 | 4. Thumbnails | 1 | Medium | JPEG quality vs file size tradeoff |
 | 5. Importer | 1 | High | Rayon + Mutex contention |
-| 6. Commands | 1 | Low | Boilerplate |
-| 6b. Search | 1 | Medium | FTS5 query correctness |
-| 7. Main | 1 | Low | Setup hook ordering |
-| 8. Frontend Base | 7 | Medium | Store type safety |
-| 9. Layout | 3 | Low | None |
-| 10. Sidebar | 3 | Low | None |
-| 11. Virtual Grid | 2 | High | 60fps at scale |
-| 12. Viewer | 1 | Medium | Key event handling |
-| 13. Import UX | 2 | Low | Progress feedback |
-| 14. E2E Test | 0 | Low | Manual verification |
+| 6. Search | 1 | Medium | FTS5 query correctness |
+| 7. Commands | 1 | Low | Boilerplate |
+| 8. Main | 1 | Low | Setup hook ordering |
+| 9. Frontend Base | 7 | Medium | Store type safety |
+| 10. Layout | 3 | Low | None |
+| 11. Sidebar | 3 | Low | None |
+| 12. Virtual Grid | 2 | High | 60fps at scale |
+| 13. Viewer | 1 | Medium | Key event handling |
+| 14. Import UX | 2 | Low | Progress feedback |
+| 15. E2E Test | 0 | Low | Manual verification |
