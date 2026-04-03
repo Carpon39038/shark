@@ -1,0 +1,644 @@
+use rusqlite::{params, Connection};
+use std::path::Path;
+
+use crate::error::AppError;
+use crate::models::{Folder, Item, ItemFilter, ItemPage, Library, Pagination, SortSpec};
+
+pub struct DbState {
+    pub registry: std::sync::Mutex<Connection>,
+    pub library: std::sync::Mutex<Option<Connection>>,
+}
+
+impl DbState {
+    pub fn new(registry_path: &Path) -> Result<Self, AppError> {
+        let conn = init_registry_db(registry_path)?;
+        Ok(Self {
+            registry: std::sync::Mutex::new(conn),
+            library: std::sync::Mutex::new(None),
+        })
+    }
+}
+
+fn apply_pragmas(conn: &Connection) -> Result<(), AppError> {
+    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA synchronous=NORMAL;")?;
+    Ok(())
+}
+
+// --- Registry DB ---
+
+pub fn init_registry_db(path: &Path) -> Result<Connection, AppError> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let conn = Connection::open(path)?;
+    apply_pragmas(&conn)?;
+    run_registry_migrations(&conn)?;
+    Ok(conn)
+}
+
+fn run_registry_migrations(conn: &Connection) -> Result<(), AppError> {
+    let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version < 1 {
+        conn.execute_batch(
+            "CREATE TABLE libraries (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                path TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );",
+        )?;
+        conn.pragma_update(None, "user_version", 1)?;
+    }
+    Ok(())
+}
+
+pub fn create_library(conn: &Connection, name: &str, path: &str) -> Result<Library, AppError> {
+    let id = uuid::Uuid::new_v4().to_string();
+    let created_at = chrono::Utc::now().to_rfc3339();
+
+    // Create directory structure
+    let lib_dir = Path::new(path);
+    std::fs::create_dir_all(lib_dir.join("images"))?;
+    std::fs::create_dir_all(lib_dir.join(".shark"))?;
+
+    // Create per-library DB
+    let db_path = lib_dir.join(".shark").join("metadata.db");
+    let lib_conn = init_library_db(&db_path)?;
+    drop(lib_conn);
+
+    conn.execute(
+        "INSERT INTO libraries (id, name, path, created_at) VALUES (?1, ?2, ?3, ?4)",
+        params![id, name, path, created_at],
+    )?;
+
+    Ok(Library {
+        id,
+        name: name.to_string(),
+        path: path.to_string(),
+        created_at,
+    })
+}
+
+pub fn get_library(conn: &Connection, id: &str) -> Result<Library, AppError> {
+    conn.query_row(
+        "SELECT id, name, path, created_at FROM libraries WHERE id = ?1",
+        params![id],
+        |row| {
+            Ok(Library {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                path: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        },
+    )
+    .map_err(|e| AppError::NotFound(format!("Library {id}: {e}")))
+}
+
+pub fn get_library_by_path(conn: &Connection, path: &str) -> Result<Library, AppError> {
+    conn.query_row(
+        "SELECT id, name, path, created_at FROM libraries WHERE path = ?1",
+        params![path],
+        |row| {
+            Ok(Library {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                path: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        },
+    )
+    .map_err(|e| AppError::NotFound(format!("Library at {path}: {e}")))
+}
+
+pub fn list_libraries(conn: &Connection) -> Result<Vec<Library>, AppError> {
+    let mut stmt = conn.prepare("SELECT id, name, path, created_at FROM libraries ORDER BY name")?;
+    let libs = stmt
+        .query_map([], |row| {
+            Ok(Library {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                path: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(libs)
+}
+
+// --- Library DB ---
+
+pub fn init_library_db(path: &Path) -> Result<Connection, AppError> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let conn = Connection::open(path)?;
+    apply_pragmas(&conn)?;
+    run_library_migrations(&conn)?;
+    Ok(conn)
+}
+
+fn run_library_migrations(conn: &Connection) -> Result<(), AppError> {
+    let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version < 1 {
+        conn.execute_batch(
+            "CREATE TABLE items (
+                id TEXT PRIMARY KEY,
+                file_path TEXT NOT NULL UNIQUE,
+                file_name TEXT NOT NULL,
+                file_size INTEGER NOT NULL,
+                file_type TEXT NOT NULL,
+                width INTEGER,
+                height INTEGER,
+                tags TEXT NOT NULL DEFAULT '',
+                rating INTEGER NOT NULL DEFAULT 0,
+                notes TEXT NOT NULL DEFAULT '',
+                sha256 TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                modified_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE INDEX idx_items_file_type ON items(file_type);
+            CREATE INDEX idx_items_rating ON items(rating);
+            CREATE INDEX idx_items_created_at ON items(created_at);
+            CREATE INDEX idx_items_sha256 ON items(sha256);
+
+            CREATE TABLE folders (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                parent_id TEXT,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (parent_id) REFERENCES folders(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE item_folders (
+                item_id TEXT NOT NULL,
+                folder_id TEXT NOT NULL,
+                PRIMARY KEY (item_id, folder_id),
+                FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
+                FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE smart_folders (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                rules TEXT NOT NULL,
+                parent_id TEXT,
+                FOREIGN KEY (parent_id) REFERENCES folders(id)
+            );
+
+            CREATE TABLE thumbnails (
+                item_id TEXT PRIMARY KEY,
+                thumb_256_path TEXT,
+                thumb_1024_path TEXT,
+                FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+            );
+
+            CREATE VIRTUAL TABLE items_fts USING fts5(
+                file_name,
+                tags,
+                notes,
+                content=items,
+                content_rowid=rowid
+            );
+
+            CREATE TRIGGER items_ai AFTER INSERT ON items BEGIN
+                INSERT INTO items_fts(rowid, file_name, tags, notes)
+                VALUES (new.rowid, new.file_name, new.tags, new.notes);
+            END;
+
+            CREATE TRIGGER items_ad AFTER DELETE ON items BEGIN
+                INSERT INTO items_fts(items_fts, rowid, file_name, tags, notes)
+                VALUES ('delete', old.rowid, old.file_name, old.tags, old.notes);
+            END;
+
+            CREATE TRIGGER items_au AFTER UPDATE ON items BEGIN
+                INSERT INTO items_fts(items_fts, rowid, file_name, tags, notes)
+                VALUES ('delete', old.rowid, old.file_name, old.tags, old.notes);
+                INSERT INTO items_fts(rowid, file_name, tags, notes)
+                VALUES (new.rowid, new.file_name, new.tags, new.notes);
+            END;",
+        )?;
+        conn.pragma_update(None, "user_version", 1)?;
+    }
+    Ok(())
+}
+
+pub fn insert_item(conn: &Connection, item: &Item) -> Result<(), AppError> {
+    conn.execute(
+        "INSERT INTO items (id, file_path, file_name, file_size, file_type, width, height, tags, rating, notes, sha256, status, created_at, modified_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+        params![
+            item.id, item.file_path, item.file_name, item.file_size,
+            item.file_type, item.width, item.height, item.tags,
+            item.rating, item.notes, item.sha256, item.status,
+            item.created_at, item.modified_at
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn get_item(conn: &Connection, id: &str) -> Result<Item, AppError> {
+    conn.query_row(
+        "SELECT id, file_path, file_name, file_size, file_type, width, height, tags, rating, notes, sha256, status, created_at, modified_at
+         FROM items WHERE id = ?1",
+        params![id],
+        |row| {
+            Ok(Item {
+                id: row.get(0)?,
+                file_path: row.get(1)?,
+                file_name: row.get(2)?,
+                file_size: row.get(3)?,
+                file_type: row.get(4)?,
+                width: row.get(5)?,
+                height: row.get(6)?,
+                tags: row.get(7)?,
+                rating: row.get(8)?,
+                notes: row.get(9)?,
+                sha256: row.get(10)?,
+                status: row.get(11)?,
+                created_at: row.get(12)?,
+                modified_at: row.get(13)?,
+            })
+        },
+    )
+    .map_err(|e| AppError::NotFound(format!("Item {id}: {e}")))
+}
+
+pub fn query_items(
+    conn: &Connection,
+    filter: &ItemFilter,
+    sort: &SortSpec,
+    pagination: &Pagination,
+) -> Result<ItemPage, AppError> {
+    let mut where_clauses = Vec::new();
+    let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+    if let Some(ref folder_id) = filter.folder_id {
+        where_clauses.push(format!(
+            "id IN (SELECT item_id FROM item_folders WHERE folder_id = ?{})",
+            param_values.len() + 1
+        ));
+        param_values.push(Box::new(folder_id.clone()));
+    }
+
+    if let Some(ref file_types) = filter.file_types {
+        if !file_types.is_empty() {
+            let placeholders: Vec<String> = (0..file_types.len())
+                .map(|i| format!("?{}", param_values.len() + i + 1))
+                .collect();
+            where_clauses.push(format!("file_type IN ({})", placeholders.join(", ")));
+            for ft in file_types {
+                param_values.push(Box::new(ft.clone()));
+            }
+        }
+    }
+
+    if let Some(rating_min) = filter.rating_min {
+        where_clauses.push(format!("rating >= ?{}", param_values.len() + 1));
+        param_values.push(Box::new(rating_min));
+    }
+
+    where_clauses.push("status = 'active'".to_string());
+
+    let allowed_sort_fields = ["created_at", "modified_at", "file_name", "file_size", "rating"];
+    let sort_field = if allowed_sort_fields.contains(&sort.field.as_str()) {
+        &sort.field
+    } else {
+        "created_at"
+    };
+    let sort_dir = if sort.direction == "asc" {
+        "ASC"
+    } else {
+        "DESC"
+    };
+
+    let where_sql = if where_clauses.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", where_clauses.join(" AND "))
+    };
+
+    let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+
+    let count_sql = format!("SELECT COUNT(*) FROM items {}", where_sql);
+    let total: i64 = conn.query_row(&count_sql, params_refs.as_slice(), |row| row.get(0))?;
+
+    // Rebuild params for query (can't clone Box<dyn ToSql>)
+    let mut query_params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+    if let Some(ref folder_id) = filter.folder_id {
+        query_params.push(Box::new(folder_id.clone()));
+    }
+    if let Some(ref file_types) = filter.file_types {
+        if !file_types.is_empty() {
+            for ft in file_types {
+                query_params.push(Box::new(ft.clone()));
+            }
+        }
+    }
+    if let Some(rating_min) = filter.rating_min {
+        query_params.push(Box::new(rating_min));
+    }
+    let limit_idx = query_params.len() + 1;
+    let offset_idx = query_params.len() + 2;
+    query_params.push(Box::new(pagination.limit()));
+    query_params.push(Box::new(pagination.offset()));
+    let query_refs: Vec<&dyn rusqlite::types::ToSql> = query_params.iter().map(|p| p.as_ref()).collect();
+
+    let query_sql = format!(
+        "SELECT id, file_path, file_name, file_size, file_type, width, height, tags, rating, notes, sha256, status, created_at, modified_at
+         FROM items {} ORDER BY {} {} LIMIT ?{} OFFSET ?{}",
+        where_sql, sort_field, sort_dir, limit_idx, offset_idx
+    );
+
+    let mut stmt = conn.prepare(&query_sql)?;
+    let items = stmt
+        .query_map(query_refs.as_slice(), |row| {
+            Ok(Item {
+                id: row.get(0)?,
+                file_path: row.get(1)?,
+                file_name: row.get(2)?,
+                file_size: row.get(3)?,
+                file_type: row.get(4)?,
+                width: row.get(5)?,
+                height: row.get(6)?,
+                tags: row.get(7)?,
+                rating: row.get(8)?,
+                notes: row.get(9)?,
+                sha256: row.get(10)?,
+                status: row.get(11)?,
+                created_at: row.get(12)?,
+                modified_at: row.get(13)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(ItemPage {
+        items,
+        total,
+        page: pagination.page,
+        page_size: pagination.page_size,
+    })
+}
+
+pub fn delete_items(conn: &Connection, ids: &[String], permanent: bool) -> Result<(), AppError> {
+    for id in ids {
+        if permanent {
+            conn.execute("DELETE FROM items WHERE id = ?1", params![id])?;
+        } else {
+            conn.execute(
+                "UPDATE items SET status = 'deleted', modified_at = datetime('now') WHERE id = ?1",
+                params![id],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+pub fn get_folders(conn: &Connection) -> Result<Vec<Folder>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, parent_id, sort_order FROM folders ORDER BY sort_order, name",
+    )?;
+    let folders = stmt
+        .query_map([], |row| {
+            Ok(Folder {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                parent_id: row.get(2)?,
+                sort_order: row.get(3)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(folders)
+}
+
+pub fn get_all_tags(conn: &Connection) -> Result<Vec<String>, AppError> {
+    let mut stmt = conn.prepare("SELECT DISTINCT tags FROM items WHERE tags != '' AND status = 'active'")?;
+    let rows = stmt.query_map([], |row| {
+        let tags: String = row.get(0)?;
+        Ok(tags)
+    })?;
+
+    let mut tag_set = std::collections::HashSet::new();
+    for row in rows {
+        let tags_str = row?;
+        for tag in tags_str.split(',') {
+            let trimmed = tag.trim();
+            if !trimmed.is_empty() {
+                tag_set.insert(trimmed.to_string());
+            }
+        }
+    }
+    let mut tags: Vec<String> = tag_set.into_iter().collect();
+    tags.sort();
+    Ok(tags)
+}
+
+pub fn sha256_exists(conn: &Connection, hash: &str) -> Result<bool, AppError> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM items WHERE sha256 = ?1",
+        params![hash],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
+}
+
+/// Check if a SHA256 hash already exists in the database (for dedup during import)
+pub fn check_duplicate(conn: &Connection, hash: &str) -> Result<bool, AppError> {
+    sha256_exists(conn, hash)
+}
+
+pub fn insert_thumbnail(
+    conn: &Connection,
+    item_id: &str,
+    thumb_256_path: Option<&str>,
+    thumb_1024_path: Option<&str>,
+) -> Result<(), AppError> {
+    conn.execute(
+        "INSERT OR REPLACE INTO thumbnails (item_id, thumb_256_path, thumb_1024_path) VALUES (?1, ?2, ?3)",
+        params![item_id, thumb_256_path, thumb_1024_path],
+    )?;
+    Ok(())
+}
+
+pub fn get_thumbnail_path(
+    conn: &Connection,
+    item_id: &str,
+    size: &str,
+) -> Result<Option<String>, AppError> {
+    let column = if size == "256" {
+        "thumb_256_path"
+    } else {
+        "thumb_1024_path"
+    };
+    let sql = format!(
+        "SELECT {} FROM thumbnails WHERE item_id = ?1",
+        column
+    );
+    let result: Option<String> = conn
+        .query_row(&sql, params![item_id], |row| row.get(0))
+        .ok();
+    Ok(result)
+}
+
+// --- Tests ---
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_test_item(id: &str, suffix: &str) -> Item {
+        Item {
+            id: id.to_string(),
+            file_path: format!("/lib/images/test{suffix}.png"),
+            file_name: format!("test{suffix}.png"),
+            file_size: 1024,
+            file_type: "PNG".to_string(),
+            width: Some(100),
+            height: Some(100),
+            tags: String::new(),
+            rating: 0,
+            notes: String::new(),
+            sha256: format!("hash{suffix}"),
+            status: "active".to_string(),
+            created_at: "2026-04-02T12:00:00".to_string(),
+            modified_at: "2026-04-02T12:00:00".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_schema_creation() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        let tables: Vec<String> = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+
+        assert!(tables.contains(&"items".to_string()));
+        assert!(tables.contains(&"folders".to_string()));
+        assert!(tables.contains(&"thumbnails".to_string()));
+    }
+
+    #[test]
+    fn test_migration_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let _ = init_library_db(&db_path).unwrap();
+        let _ = init_library_db(&db_path).unwrap(); // run again
+    }
+
+    #[test]
+    fn test_insert_and_query_item() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        let item = make_test_item("id-1", "1");
+        insert_item(&conn, &item).unwrap();
+
+        let fetched = get_item(&conn, "id-1").unwrap();
+        assert_eq!(fetched.file_name, "test1.png");
+        assert_eq!(fetched.file_size, 1024);
+    }
+
+    #[test]
+    fn test_query_items_with_sort_and_pagination() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        for i in 1..=5 {
+            let item = make_test_item(&format!("id-{i}"), &i.to_string());
+            insert_item(&conn, &item).unwrap();
+        }
+
+        let page = query_items(
+            &conn,
+            &ItemFilter::default(),
+            &SortSpec {
+                field: "file_name".to_string(),
+                direction: "asc".to_string(),
+            },
+            &Pagination {
+                page: 0,
+                page_size: 3,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(page.items.len(), 3);
+        assert_eq!(page.total, 5);
+        assert_eq!(page.page, 0);
+    }
+
+    #[test]
+    fn test_delete_items_soft_and_hard() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        let item = make_test_item("id-del", "del");
+        insert_item(&conn, &item).unwrap();
+
+        delete_items(&conn, &["id-del".to_string()], false).unwrap();
+        let fetched = get_item(&conn, "id-del").unwrap();
+        assert_eq!(fetched.status, "deleted");
+
+        delete_items(&conn, &["id-del".to_string()], true).unwrap();
+        assert!(get_item(&conn, "id-del").is_err());
+    }
+
+    #[test]
+    fn test_registry_crud() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("registry.db");
+        let conn = init_registry_db(&db_path).unwrap();
+
+        let lib = create_library(&conn, "Test", "/tmp/test-lib").unwrap();
+        assert_eq!(lib.name, "Test");
+
+        let libs = list_libraries(&conn).unwrap();
+        assert_eq!(libs.len(), 1);
+
+        let fetched = get_library(&conn, &lib.id).unwrap();
+        assert_eq!(fetched.name, "Test");
+    }
+
+    #[test]
+    fn test_get_all_tags() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        let mut item1 = make_test_item("id-1", "1");
+        item1.tags = "landscape,nature".to_string();
+        insert_item(&conn, &item1).unwrap();
+
+        let mut item2 = make_test_item("id-2", "2");
+        item2.tags = "portrait,nature".to_string();
+        insert_item(&conn, &item2).unwrap();
+
+        let tags = get_all_tags(&conn).unwrap();
+        assert_eq!(tags, vec!["landscape", "nature", "portrait"]);
+    }
+
+    #[test]
+    fn test_foreign_keys_enforced() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        let result = conn.execute(
+            "INSERT INTO item_folders (item_id, folder_id) VALUES ('no-item', 'no-folder')",
+            [],
+        );
+        assert!(result.is_err());
+    }
+}
