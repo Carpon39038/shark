@@ -6,11 +6,17 @@ interface ContextMenu {
   itemId: string;
 }
 
+export interface ImportProgress {
+  current: number;
+  total: number;
+}
+
 interface UiState {
   viewerOpen: boolean;
   viewerItemId: string | null;
   contextMenu: ContextMenu | null;
   importing: boolean;
+  importProgress: ImportProgress | null;
   error: string | null;
 }
 
@@ -20,6 +26,7 @@ interface UiActions {
   setContextMenu: (menu: ContextMenu) => void;
   clearContextMenu: () => void;
   setImporting: (importing: boolean) => void;
+  setImportProgress: (progress: ImportProgress | null) => void;
   setError: (msg: string | null) => void;
 }
 
@@ -28,6 +35,7 @@ export const useUiStore = create<UiState & UiActions>()((set) => ({
   viewerItemId: null,
   contextMenu: null,
   importing: false,
+  importProgress: null,
   error: null,
 
   openViewer: (itemId) =>
@@ -41,6 +49,8 @@ export const useUiStore = create<UiState & UiActions>()((set) => ({
   clearContextMenu: () => set({ contextMenu: null }),
 
   setImporting: (importing) => set({ importing }),
+
+  setImportProgress: (progress) => set({ importProgress: progress }),
 
   setError: (msg) => set({ error: msg }),
 }));

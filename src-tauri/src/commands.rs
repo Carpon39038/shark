@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use rusqlite::Connection;
-use tauri::State;
+use tauri::{Emitter, State};
 
 use crate::db::{self, DbState};
 use crate::error::AppError;
@@ -74,24 +74,37 @@ pub fn list_libraries(state: State<'_, DbState>) -> Result<Vec<Library>, AppErro
 }
 
 #[tauri::command]
-pub fn import_files(
+pub async fn import_files(
     library_id: String,
     source_path: String,
     state: State<'_, DbState>,
+    app: tauri::AppHandle,
 ) -> Result<ImportResult, AppError> {
     let lib = with_registry_conn(&state, |conn| db::get_library(conn, &library_id))?;
+    let lib_path = lib.path.clone();
 
-    // Prepare all data without holding the lock (file walking, SHA256, metadata)
-    let prepared = crate::indexer::prepare_import(Path::new(&source_path))?;
+    tauri::async_runtime::spawn_blocking(move || -> Result<ImportResult, AppError> {
+        let prepared = crate::indexer::prepare_import(Path::new(&source_path))?;
+        let lib_db_path = Path::new(&lib_path).join(".shark").join("metadata.db");
+        let conn = db::init_library_db(&lib_db_path)?;
 
-    // Briefly lock only for DB writes (dedup check + insert)
-    let guard = state
-        .library
-        .lock()
-        .map_err(|e| AppError::Database(e.to_string()))?;
-    let conn = guard.as_ref().ok_or(AppError::NoActiveLibrary)?;
-
-    crate::indexer::commit_import(conn, Path::new(&lib.path), prepared)
+        crate::indexer::commit_import(
+            &conn,
+            Path::new(&lib_path),
+            prepared,
+            |current, total, item, thumb_path| {
+                let payload = serde_json::json!({
+                    "current": current,
+                    "total": total,
+                    "item": item,
+                    "thumbnailPath": thumb_path,
+                });
+                let _ = app.emit("import-progress", payload);
+            },
+        )
+    })
+    .await
+    .map_err(|e| AppError::Import(format!("Import task failed: {e}")))?
 }
 
 #[tauri::command]

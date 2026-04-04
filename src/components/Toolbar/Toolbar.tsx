@@ -12,7 +12,6 @@ export function Toolbar() {
   const { libraries, activeLibraryId } = useLibraryStore();
   const { sidebarOpen, toggleSidebar, gridSize, setGridSize } = useViewStore();
   const { searchQuery, setSearchQuery } = useFilterStore();
-  const importing = useUiStore((s) => s.importing);
   const { setItems, loadItems } = useItemStore();
   const activeLib = libraries.find((l) => l.id === activeLibraryId);
 
@@ -94,10 +93,6 @@ export function Toolbar() {
       </div>
 
       <ImportButton />
-
-      {importing && (
-        <span className="text-xs text-yellow-400 animate-pulse">Importing...</span>
-      )}
     </div>
   );
 }

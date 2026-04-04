@@ -12,6 +12,7 @@ interface ItemState {
 
 interface ItemActions {
   setItems: (items: Item[], total: number) => void;
+  addItem: (item: Item, thumbnailPath?: string) => void;
   toggleSelect: (id: string) => void;
   selectRange: (fromId: string, toId: string, append?: boolean) => void;
   clearSelection: () => void;
@@ -34,6 +35,15 @@ export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
 
   setItems: (items, total) =>
     set({ items, total, selectedIds: new Set<string>() }),
+
+  addItem: (item, thumbnailPath) =>
+    set((state) => ({
+      items: [item, ...state.items],
+      total: state.total + 1,
+      thumbnailPaths: thumbnailPath
+        ? { ...state.thumbnailPaths, [item.id]: thumbnailPath }
+        : state.thumbnailPaths,
+    })),
 
   toggleSelect: (id) =>
     set((state) => {

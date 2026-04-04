@@ -434,13 +434,27 @@ pub fn get_all_tags(conn: &Connection) -> Result<Vec<String>, AppError> {
     Ok(tags)
 }
 
-pub fn sha256_exists(conn: &Connection, hash: &str) -> Result<bool, AppError> {
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM items WHERE sha256 = ?1",
-        params![hash],
-        |row| row.get(0),
-    )?;
-    Ok(count > 0)
+pub fn batch_sha256_exists(
+    conn: &Connection,
+    hashes: &[&str],
+) -> Result<std::collections::HashSet<String>, AppError> {
+    if hashes.is_empty() {
+        return Ok(std::collections::HashSet::new());
+    }
+    let placeholders: Vec<String> = (1..=hashes.len()).map(|i| format!("?{i}")).collect();
+    let sql = format!(
+        "SELECT sha256 FROM items WHERE sha256 IN ({})",
+        placeholders.join(", ")
+    );
+    let params: Vec<&dyn rusqlite::types::ToSql> = hashes
+        .iter()
+        .map(|h| h as &dyn rusqlite::types::ToSql)
+        .collect();
+    let mut stmt = conn.prepare(&sql)?;
+    let existing: std::collections::HashSet<String> = stmt
+        .query_map(params.as_slice(), |row| row.get(0))?
+        .collect::<Result<_, _>>()?;
+    Ok(existing)
 }
 
 pub fn insert_thumbnail(
