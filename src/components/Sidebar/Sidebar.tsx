@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { LibrarySelector } from './LibrarySelector';
 import { FolderList } from './FolderList';
 import { SmartFolderList } from './SmartFolderList';
-// SmartFolderEditor will be imported in Task 8
+import { SmartFolderEditor } from './SmartFolderEditor';
 import type { SmartFolder } from '@/lib/types';
 
 export function Sidebar() {
-  const [_editorOpen, setEditorOpen] = useState(false);
-  const [_editingFolder, setEditingFolder] = useState<SmartFolder | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingFolder, setEditingFolder] = useState<SmartFolder | null>(null);
 
   const handleEdit = (folder: SmartFolder) => {
     setEditingFolder(folder);
@@ -24,7 +24,15 @@ export function Sidebar() {
       <LibrarySelector />
       <FolderList />
       <SmartFolderList onEdit={handleEdit} onCreate={handleCreate} />
-      {/* SmartFolderEditor will be wired here in Task 8 */}
+      {editorOpen && (
+        <SmartFolderEditor
+          folder={editingFolder}
+          onClose={() => {
+            setEditorOpen(false);
+            setEditingFolder(null);
+          }}
+        />
+      )}
     </div>
   );
 }
