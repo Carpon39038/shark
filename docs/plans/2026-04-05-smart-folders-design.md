@@ -13,7 +13,8 @@ Uses existing `smart_folders` table:
 | id | TEXT PRIMARY KEY | UUID |
 | name | TEXT NOT NULL | Display name |
 | rules | TEXT NOT NULL | JSON filter rules |
-| parent_id | TEXT | References smart_folders(id), nullable |
+| parent_id | TEXT | References smart_folders(id), nullable, ON DELETE CASCADE |
+| sort_order | INTEGER NOT NULL DEFAULT 0 | Sort position for drag-and-drop reorder (post-MVP) |
 
 ### Rules JSON Format
 
@@ -66,16 +67,31 @@ Uses existing `smart_folders` table:
 - AND/OR → join conditions with operator, wrap in parentheses
 - Empty conditions → `1=1` (match all)
 
+### Performance Considerations
+
+For 100k+ item libraries:
+
+- **Existing indexes** cover common filter fields: `idx_items_file_type` on `file_type`, `idx_items_rating` on `rating`, `idx_items_created_at` on `created_at`. These support equality and range queries.
+- **tags LIKE '%value%'** cannot use B-tree indexes. For smart folder rules filtering by tags, use FTS5 auxiliary queries instead of LIKE when possible (`tags MATCH ?` with FTS5 prefix syntax). Post-MVP: consider a `tags` + `item_tags` normalized table for indexed tag lookups.
+- **file_name / notes `contains`** also use LIKE with wildcards. FTS5 full-text search is available for these fields via `items_fts`. Consider routing `contains` on `file_name`/`notes` through FTS5 when the value is a word token (no special characters).
+- **Complex rule evaluation** — AND/OR nesting with multiple conditions generates multi-clause WHERE. SQLite handles this well at 100k rows; no additional indexes needed beyond existing ones for the supported field set.
+
 ### IPC Commands
 
 | Command | Signature | Description |
 |---------|-----------|-------------|
-| `list_smart_folders` | `(library_id: String) -> Vec<SmartFolder>` | List all smart folders |
+| `list_smart_folders` | `(library_id: String) -> Vec<SmartFolder>` | List all smart folders ordered by sort_order |
 | `get_smart_folder` | `(library_id: String, id: String) -> SmartFolder` | Get single smart folder |
 | `create_smart_folder` | `(library_id: String, name: String, rules: String, parent_id: Option<String>) -> SmartFolder` | Create new |
-| `update_smart_folder` | `(library_id: String, id: String, name: Option<String>, rules: Option<String>, parent_id: Option<Option<String>>) -> SmartFolder` | Update fields |
-| `delete_smart_folder` | `(library_id: String, id: String) -> ()` | Delete with cascade |
-| `get_smart_folder_items` | `(library_id: String, id: String, page: i32, page_size: i32) -> (Vec<Item>, i32)` | Resolve rules to items |
+| `update_smart_folder` | `(library_id: String, id: String, name: Option<String>, rules: Option<String>, parent_id: Option<Option<String>>) -> SmartFolder` | Update fields (see Option semantics below) |
+| `delete_smart_folder` | `(library_id: String, id: String) -> ()` | Delete with CASCADE |
+| `get_smart_folder_items` | `(library_id: String, id: String, page: i32, page_size: i32) -> ItemPage` | Resolve rules to items with pagination |
+
+#### Option Semantics for `update_smart_folder`
+
+For `name` and `rules` (NOT NULL columns): `None` = don't modify, `Some(value)` = set new value. These fields cannot be cleared.
+
+For `parent_id` (nullable column): `None` = don't modify, `Some(None)` = clear to NULL (make top-level), `Some(Some(id))` = set new parent. This double-Option pattern is the standard Tauri IPC convention for distinguishing "skip this field" from "set to null".
 
 ## Frontend
 
@@ -135,7 +151,7 @@ Smart folders appear as an independent section below the regular folder list:
 
 **`filterStore` additions:**
 - `smartFolderId: string | null` — currently selected smart folder
-- Setting smartFolderId clears folderId (mutually exclusive)
+- Setting `smartFolderId` clears the folder selection (mutually exclusive). Note: the current `filterStore` does not have a `folderId` field — folder selection is managed separately in `itemStore`. During implementation, add `smartFolderId` to `filterStore` and ensure mutual exclusivity is handled in the component that triggers item queries.
 
 **New `smartFolderStore` (Zustand):**
 - `folders: SmartFolder[]`
@@ -159,7 +175,7 @@ User clicks smart folder
 | Scenario | Handling |
 |----------|----------|
 | Empty rules (0 conditions) | Match all items (SQL: `1=1`) |
-| Parent smart folder deleted | CASCADE deletes children |
+| Parent smart folder deleted | `ON DELETE CASCADE` on foreign key deletes children |
 | Invalid field name | Allowlist validation → AppError |
 | Empty `in`/`not_in` array | Skip condition (don't append to WHERE) |
 | `between` min > max | Auto-swap values |
@@ -180,14 +196,18 @@ User clicks smart folder
 
 ### Frontend Tests (Vitest)
 - `smartFolderStore` — create/edit/delete state transitions
-- `filterStore` — smartFolderId and folderId mutual exclusivity
+- `filterStore` — smartFolderId and folder selection mutual exclusivity
 
-## MVP Scope
+## Scope
 
-- [x] Visual rule builder (create/edit)
-- [x] Sidebar smart folder section with nesting
-- [x] Query filtering (resolve rules to items)
-- [x] Delete smart folder (right-click menu)
-- [x] Edit smart folder
-- [ ] Save from current filters (post-MVP)
-- [ ] Drag-and-drop reorder (post-MVP)
+### MVP
+- Visual rule builder (create/edit)
+- Sidebar smart folder section with nesting
+- Query filtering (resolve rules to items)
+- Delete smart folder (right-click menu)
+- Edit smart folder
+
+### Post-MVP
+- Save from current filters
+- Drag-and-drop reorder (sort_order field already in schema)
+- Icon/color customization

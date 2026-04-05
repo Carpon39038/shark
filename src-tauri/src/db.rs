@@ -258,7 +258,8 @@ fn run_library_migrations(conn: &Connection) -> Result<(), AppError> {
                 name TEXT NOT NULL,
                 rules TEXT NOT NULL,
                 parent_id TEXT,
-                FOREIGN KEY (parent_id) REFERENCES folders(id)
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (parent_id) REFERENCES smart_folders(id) ON DELETE CASCADE
             );
 
             CREATE TABLE thumbnails (
