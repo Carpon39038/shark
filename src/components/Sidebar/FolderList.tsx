@@ -2,14 +2,26 @@ import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { useItemStore } from '@/stores/itemStore';
+import { useFilterStore } from '@/stores/filterStore';
+import { useSmartFolderStore } from '@/stores/smartFolderStore';
 import { useUiStore } from '@/stores/uiStore';
 import type { Folder } from '@/lib/types';
 
 export function FolderList() {
   const activeLibraryId = useLibraryStore((s) => s.activeLibraryId);
   const loadItems = useItemStore((s) => s.loadItems);
+  const setSmartFolderId = useFilterStore((s) => s.setSmartFolderId);
+  const setSelectedSmartFolder = useSmartFolderStore((s) => s.setSelectedId);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+
+  const smartFolderId = useFilterStore((s) => s.smartFolderId);
+
+  useEffect(() => {
+    if (smartFolderId) {
+      setSelectedFolder(null);
+    }
+  }, [smartFolderId]);
 
   useEffect(() => {
     if (!activeLibraryId) {
@@ -23,6 +35,8 @@ export function FolderList() {
 
   const handleSelectFolder = (folderId: string | null) => {
     setSelectedFolder(folderId);
+    setSmartFolderId(null);
+    setSelectedSmartFolder(null);
     if (activeLibraryId) {
       loadItems(
         activeLibraryId,
