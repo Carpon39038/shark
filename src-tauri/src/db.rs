@@ -2,7 +2,7 @@ use rusqlite::{params, Connection, Row};
 use std::path::Path;
 
 use crate::error::AppError;
-use crate::models::{Folder, Item, ItemFilter, ItemPage, ItemStatus, Library, Pagination, SortDirection, SortSpec};
+use crate::models::{Folder, Item, ItemFilter, ItemPage, ItemStatus, Library, Pagination, RuleGroup, SmartFolder, SortDirection, SortSpec};
 
 pub fn row_to_item(row: &Row) -> Result<Item, rusqlite::Error> {
     let status_str: String = row.get(11)?;
@@ -433,6 +433,161 @@ pub fn get_all_tags(conn: &Connection) -> Result<Vec<String>, AppError> {
     let mut tags: Vec<String> = tag_set.into_iter().collect();
     tags.sort();
     Ok(tags)
+}
+
+// --- Smart Folders ---
+
+pub fn list_smart_folders(conn: &Connection) -> Result<Vec<SmartFolder>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, rules, parent_id FROM smart_folders ORDER BY name",
+    )?;
+    let folders = stmt
+        .query_map([], |row| {
+            Ok(SmartFolder {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                rules: row.get(2)?,
+                parent_id: row.get(3)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(folders)
+}
+
+pub fn get_smart_folder(conn: &Connection, id: &str) -> Result<SmartFolder, AppError> {
+    conn.query_row(
+        "SELECT id, name, rules, parent_id FROM smart_folders WHERE id = ?1",
+        params![id],
+        |row| {
+            Ok(SmartFolder {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                rules: row.get(2)?,
+                parent_id: row.get(3)?,
+            })
+        },
+    )
+    .map_err(|e| AppError::NotFound(format!("Smart folder {id}: {e}")))
+}
+
+pub fn create_smart_folder(
+    conn: &Connection,
+    name: &str,
+    rules: &str,
+    parent_id: Option<&str>,
+) -> Result<SmartFolder, AppError> {
+    let id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO smart_folders (id, name, rules, parent_id) VALUES (?1, ?2, ?3, ?4)",
+        params![id, name, rules, parent_id],
+    )?;
+    get_smart_folder(conn, &id)
+}
+
+pub fn update_smart_folder(
+    conn: &Connection,
+    id: &str,
+    name: Option<&str>,
+    rules: Option<&str>,
+    parent_id: Option<Option<&str>>,
+) -> Result<SmartFolder, AppError> {
+    // Verify exists first
+    get_smart_folder(conn, id)?;
+
+    let mut set_clauses = Vec::new();
+    let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+    if let Some(n) = name {
+        param_values.push(Box::new(n.to_string()));
+        set_clauses.push(format!("name = ?{}", param_values.len()));
+    }
+    if let Some(r) = rules {
+        param_values.push(Box::new(r.to_string()));
+        set_clauses.push(format!("rules = ?{}", param_values.len()));
+    }
+    if let Some(pid) = parent_id {
+        param_values.push(Box::new(pid.map(String::from)));
+        set_clauses.push(format!("parent_id = ?{}", param_values.len()));
+    }
+
+    if set_clauses.is_empty() {
+        return get_smart_folder(conn, id);
+    }
+
+    param_values.push(Box::new(id.to_string()));
+    let sql = format!(
+        "UPDATE smart_folders SET {} WHERE id = ?{}",
+        set_clauses.join(", "),
+        param_values.len()
+    );
+
+    let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+        param_values.iter().map(|p| p.as_ref()).collect();
+    conn.execute(&sql, params_refs.as_slice())?;
+
+    get_smart_folder(conn, id)
+}
+
+pub fn delete_smart_folder(conn: &Connection, id: &str) -> Result<(), AppError> {
+    let rows = conn.execute("DELETE FROM smart_folders WHERE id = ?1", params![id])?;
+    if rows == 0 {
+        return Err(AppError::NotFound(format!("Smart folder {id}")));
+    }
+    Ok(())
+}
+
+pub fn query_smart_folder_items(
+    conn: &Connection,
+    rules_json: &str,
+    sort: &SortSpec,
+    pagination: &Pagination,
+) -> Result<ItemPage, AppError> {
+    let rule_group: RuleGroup =
+        serde_json::from_str(rules_json).map_err(|e| AppError::Database(format!("Invalid rules JSON: {e}")))?;
+    let (where_fragment, mut rule_params) = crate::smart_folder::rules_to_sql(&rule_group)?;
+
+    let allowed_sort_fields = ["created_at", "modified_at", "file_name", "file_size", "rating"];
+    let sort_field = if allowed_sort_fields.contains(&sort.field.as_str()) {
+        &sort.field
+    } else {
+        "created_at"
+    };
+    let sort_dir = match sort.direction {
+        SortDirection::Asc => "ASC",
+        SortDirection::Desc => "DESC",
+    };
+
+    // Count with rule WHERE + status filter
+    let count_sql = format!(
+        "SELECT COUNT(*) FROM items WHERE ({}) AND status = 'active'",
+        where_fragment
+    );
+    let count_refs: Vec<&dyn rusqlite::types::ToSql> = rule_params.iter().map(|p| p.as_ref()).collect();
+    let total: i64 = conn.query_row(&count_sql, count_refs.as_slice(), |row| row.get(0))?;
+
+    // Query with pagination
+    let limit_idx = rule_params.len() + 1;
+    let offset_idx = rule_params.len() + 2;
+    rule_params.push(Box::new(pagination.limit()));
+    rule_params.push(Box::new(pagination.offset()));
+
+    let query_sql = format!(
+        "SELECT {ITEM_COLUMNS} FROM items WHERE ({}) AND status = 'active' ORDER BY {} {} LIMIT ?{} OFFSET ?{}",
+        where_fragment, sort_field, sort_dir, limit_idx, offset_idx
+    );
+    let query_refs: Vec<&dyn rusqlite::types::ToSql> = rule_params.iter().map(|p| p.as_ref()).collect();
+
+    let mut stmt = conn.prepare(&query_sql)?;
+    let items = stmt
+        .query_map(query_refs.as_slice(), row_to_item)?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(ItemPage {
+        items,
+        total,
+        page: pagination.page,
+        page_size: pagination.page_size,
+    })
 }
 
 pub fn batch_sha256_exists(
