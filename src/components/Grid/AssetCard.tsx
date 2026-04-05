@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { Item } from '@/lib/types';
 
@@ -22,9 +22,17 @@ export const AssetCard = React.memo(function AssetCard({
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
 
+  // Reset loading state when the image source changes
+  useEffect(() => {
+    setLoaded(false);
+    setError(false);
+  }, [thumbnailPath, item.file_path]);
+
   // Use generated thumbnail if available, otherwise fall back to original file
+  const source = thumbnailPath ?? item.file_path;
+  // If source is already a data URL, use it directly; otherwise convert file path
   const thumbSrc = !error
-    ? convertFileSrc(thumbnailPath ?? item.file_path)
+    ? source.startsWith('data:') ? source : convertFileSrc(source)
     : undefined;
 
   return (

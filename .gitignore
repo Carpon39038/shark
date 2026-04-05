@@ -28,3 +28,6 @@ src-tauri/target/
 
 # Worktrees
 .worktrees/
+
+# Claude Code project instructions (do not commit)
+CLAUDE.md

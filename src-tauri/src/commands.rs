@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use base64::{engine::general_purpose::STANDARD, Engine};
 use rusqlite::Connection;
 use tauri::{Emitter, State};
 
@@ -143,10 +144,14 @@ pub fn get_thumbnail(
         ThumbnailSize::S256 => "256",
         ThumbnailSize::S1024 => "1024",
     };
-    with_library_conn(&state, |conn| {
+    let path = with_library_conn(&state, |conn| {
         db::get_thumbnail_path(conn, &item_id, size_str)?
             .ok_or_else(|| AppError::NotFound(format!("Thumbnail for {item_id}")))
-    })
+    })?;
+    let data = std::fs::read(&path)
+        .map_err(|e| AppError::Io(format!("Failed to read thumbnail: {e}")))?;
+    let b64 = STANDARD.encode(&data);
+    Ok(format!("data:image/jpeg;base64,{b64}"))
 }
 
 #[tauri::command]
@@ -159,7 +164,8 @@ pub fn get_thumbnails_batch(
         ThumbnailSize::S256 => "256",
         ThumbnailSize::S1024 => "1024",
     };
-    with_library_conn(&state, |conn| {
+    // Step 1: Get paths from DB (under lock)
+    let paths: HashMap<String, String> = with_library_conn(&state, |conn| {
         let mut map = HashMap::new();
         for id in &item_ids {
             if let Some(path) = db::get_thumbnail_path(conn, id, size_str)? {
@@ -167,7 +173,17 @@ pub fn get_thumbnails_batch(
             }
         }
         Ok(map)
-    })
+    })?;
+
+    // Step 2: Read files and return as data URLs (no lock needed)
+    let mut result = HashMap::new();
+    for (id, path) in paths {
+        if let Ok(data) = std::fs::read(&path) {
+            let b64 = STANDARD.encode(&data);
+            result.insert(id, format!("data:image/jpeg;base64,{b64}"));
+        }
+    }
+    Ok(result)
 }
 
 #[tauri::command]

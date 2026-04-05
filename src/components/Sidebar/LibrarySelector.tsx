@@ -11,9 +11,14 @@ export function LibrarySelector() {
   const loadItems = useItemStore((s) => s.loadItems);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const handleSelect = (id: string) => {
+  const handleSelect = async (id: string) => {
     setActiveLibrary(id);
-    invoke('open_library', { path: libraries.find((l) => l.id === id)?.path }).catch((e) => useUiStore.getState().setError(String(e)));
+    try {
+      await invoke('open_library', { path: libraries.find((l) => l.id === id)?.path });
+    } catch (e) {
+      useUiStore.getState().setError(String(e));
+      return;
+    }
     loadItems(id, {}, { field: 'created_at', direction: 'desc' }, { page: 0, page_size: 100 });
   };
 

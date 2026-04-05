@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { Item, ItemFilter, SortSpec, Pagination, ItemPage } from '@/lib/types';
+import { useUiStore } from './uiStore';
 
 interface ItemState {
   items: Item[];
@@ -100,6 +101,9 @@ export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
       if (ids.length > 0) {
         get().loadThumbnails(ids);
       }
+    } catch (e) {
+      console.error('Failed to load items:', e);
+      useUiStore.getState().setError(String(e));
     } finally {
       set({ loading: false });
     }
@@ -114,8 +118,8 @@ export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
         size: 'S256',
       });
       set((state) => ({ thumbnailPaths: { ...state.thumbnailPaths, ...map } }));
-    } catch {
-      // Thumbnails not yet generated — fall back to original file
+    } catch (e) {
+      console.error('Failed to load thumbnails:', e);
     }
   },
 }));
