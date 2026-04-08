@@ -8,9 +8,11 @@
 
 **Tech Stack:** Rust (rusqlite, serde, serde_json), TypeScript, React, Zustand, Tailwind CSS
 
+**Status:** ✅ COMPLETED
+
 ---
 
-### Task 1: Rust models for smart folder types
+### Task 1: Rust models for smart folder types ✅
 
 **Files:**
 - Modify: `src-tauri/src/models.rs` (append after line 133)
@@ -56,7 +58,7 @@ git commit -m "feat: add SmartFolder and rule types to models"
 
 ---
 
-### Task 2: Rules-to-SQL engine with unit tests
+### Task 2: Rules-to-SQL engine with unit tests ✅
 
 **Files:**
 - Create: `src-tauri/src/smart_folder.rs`
@@ -431,7 +433,7 @@ git commit -m "feat: add rules-to-SQL engine for smart folders"
 
 ---
 
-### Task 3: DB CRUD functions for smart folders
+### Task 3: DB CRUD functions for smart folders ✅
 
 **Files:**
 - Modify: `src-tauri/src/db.rs` (append after `get_all_tags` function, ~line 435)
@@ -646,7 +648,7 @@ git commit -m "feat: add smart folder CRUD and query functions to db"
 
 ---
 
-### Task 4: IPC command handlers
+### Task 4: IPC command handlers ✅
 
 **Files:**
 - Modify: `src-tauri/src/commands.rs` (append after existing commands)
@@ -753,7 +755,7 @@ git commit -m "feat: add IPC commands for smart folders"
 
 ---
 
-### Task 5: TypeScript types
+### Task 5: TypeScript types ✅
 
 **Files:**
 - Modify: `src/lib/types.ts` (append after line 67)
@@ -855,7 +857,7 @@ git commit -m "feat: add TypeScript types for smart folders"
 
 ---
 
-### Task 6: smartFolderStore (Zustand)
+### Task 6: smartFolderStore (Zustand) ✅
 
 **Files:**
 - Create: `src/stores/smartFolderStore.ts`
@@ -1032,7 +1034,7 @@ git commit -m "feat: add smart folder stores and update filter/item stores"
 
 ---
 
-### Task 7: SmartFolderList sidebar component
+### Task 7: SmartFolderList sidebar component ✅
 
 **Files:**
 - Create: `src/components/Sidebar/SmartFolderList.tsx`
@@ -1245,7 +1247,7 @@ git commit -m "feat: add SmartFolderList sidebar component"
 
 ---
 
-### Task 8: SmartFolderEditor modal
+### Task 8: SmartFolderEditor modal ✅
 
 **Files:**
 - Create: `src/components/Sidebar/SmartFolderEditor.tsx`
@@ -1619,7 +1621,7 @@ git commit -m "feat: add SmartFolderEditor modal and wire up sidebar"
 
 ---
 
-### Task 9: Integration — make FolderList and SmartFolderList selection mutually exclusive
+### Task 9: Integration — make FolderList and SmartFolderList selection mutually exclusive ✅
 
 **Files:**
 - Modify: `src/components/Sidebar/FolderList.tsx`
@@ -1682,7 +1684,7 @@ git commit -m "feat: make folder and smart folder selection mutually exclusive"
 
 ---
 
-### Task 10: End-to-end smoke test
+### Task 10: End-to-end smoke test ✅
 
 **Step 1: Run full Rust test suite**
 
