@@ -41,6 +41,7 @@ fn copy_to_library(src: &Path, library_path: &Path, id: &str) -> Result<std::pat
 }
 
 /// Data extracted from source file during parallel processing (no copy yet).
+#[derive(Clone)]
 pub struct PreparedFile {
     pub source_path: std::path::PathBuf,
     pub id: String,
@@ -101,6 +102,64 @@ pub fn prepare_import(source_path: &Path) -> Result<Vec<Result<PreparedFile, App
         .collect();
 
     Ok(prepared)
+}
+
+/// Identifies duplicates among prepared files against existing DB items.
+/// Returns (duplicates_info, non_duplicate_files).
+pub fn find_duplicates(
+    conn: &Connection,
+    prepared: &[Result<PreparedFile, AppError>],
+) -> Result<(Vec<crate::models::DuplicateInfo>, Vec<PreparedFile>), AppError> {
+    // Separate successes from failures
+    let mut ok_files: Vec<PreparedFile> = Vec::new();
+    for pf in prepared {
+        if let Ok(pf) = pf {
+            ok_files.push(pf.clone());
+        }
+    }
+
+    if ok_files.is_empty() {
+        return Ok((Vec::new(), Vec::new()));
+    }
+
+    // Batch dedup check
+    let sha256s: Vec<&str> = ok_files.iter().map(|pf| pf.sha256.as_str()).collect();
+    let existing_items = crate::db::get_items_by_sha256(conn, &sha256s)?;
+
+    // Build lookup: sha256 -> existing item
+    let mut existing_by_hash: std::collections::HashMap<String, &Item> = std::collections::HashMap::new();
+    for item in &existing_items {
+        existing_by_hash.insert(item.sha256.clone(), item);
+    }
+
+    // Separate duplicates from non-duplicates
+    let mut duplicates = Vec::new();
+    let mut non_dup_files = Vec::new();
+
+    for pf in ok_files {
+        if let Some(existing) = existing_by_hash.get(&pf.sha256) {
+            let thumb_path = crate::db::get_thumbnail_path(conn, &existing.id, "256").ok().flatten();
+
+            duplicates.push(crate::models::DuplicateInfo {
+                existing: crate::models::ExistingItemInfo {
+                    id: existing.id.clone(),
+                    filename: existing.file_name.clone(),
+                    path: existing.file_path.clone(),
+                    file_size: existing.file_size,
+                    thumbnail_path: thumb_path,
+                },
+                new_file: crate::models::NewFileInfo {
+                    source_path: pf.source_path.to_string_lossy().to_string(),
+                    filename: pf.file_name.clone(),
+                    file_size: pf.file_size,
+                },
+            });
+        } else {
+            non_dup_files.push(pf);
+        }
+    }
+
+    Ok((duplicates, non_dup_files))
 }
 
 /// Phase 3: Batch dedup, parallel copy+thumbnail, transaction-wrapped batch insert.
