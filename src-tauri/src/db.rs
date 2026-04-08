@@ -613,6 +613,29 @@ pub fn batch_sha256_exists(
     Ok(existing)
 }
 
+pub fn get_items_by_sha256(
+    conn: &Connection,
+    hashes: &[&str],
+) -> Result<Vec<Item>, AppError> {
+    if hashes.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders: Vec<String> = (1..=hashes.len()).map(|i| format!("?{i}")).collect();
+    let sql = format!(
+        "SELECT {ITEM_COLUMNS} FROM items WHERE sha256 IN ({})",
+        placeholders.join(", ")
+    );
+    let params: Vec<&dyn rusqlite::types::ToSql> = hashes
+        .iter()
+        .map(|h| h as &dyn rusqlite::types::ToSql)
+        .collect();
+    let mut stmt = conn.prepare(&sql)?;
+    let items = stmt
+        .query_map(params.as_slice(), row_to_item)?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(items)
+}
+
 pub fn insert_thumbnail(
     conn: &Connection,
     item_id: &str,
