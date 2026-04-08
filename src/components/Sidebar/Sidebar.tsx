@@ -3,7 +3,6 @@ import { LibrarySelector } from './LibrarySelector';
 import { FolderList } from './FolderList';
 import { SmartFolderList } from './SmartFolderList';
 import { SmartFolderEditor } from './SmartFolderEditor';
-import { SidebarDropZone } from './SidebarDropZone';
 import type { SmartFolder } from '@/lib/types';
 
 export function Sidebar() {
@@ -21,7 +20,7 @@ export function Sidebar() {
   };
 
   return (
-    <div className="w-56 shrink-0 bg-neutral-800 border-r border-neutral-700 flex flex-col overflow-hidden">
+    <div className="w-64 bg-[#F6F6F6] border-r border-gray-200 flex flex-col overflow-y-auto pt-4 px-3 pb-4 shrink-0">
       <LibrarySelector />
       <FolderList />
       <SmartFolderList onEdit={handleEdit} onCreate={handleCreate} />
@@ -34,7 +33,6 @@ export function Sidebar() {
           }}
         />
       )}
-      <SidebarDropZone />
     </div>
   );
 }

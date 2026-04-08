@@ -5,14 +5,14 @@ export function SidebarDropZone() {
 
   return (
     <div
-      className={`mt-auto mx-2 mb-2 rounded-lg border-2 border-dashed p-4 text-center transition-colors ${
+      className={`mt-auto mx-1 mb-1 rounded-lg border-2 border-dashed p-3 text-center transition-colors ${
         isDragOver
-          ? 'border-blue-400 bg-blue-500/10 text-blue-300'
-          : 'border-neutral-600 text-neutral-500'
+          ? 'border-blue-400 bg-blue-50 text-blue-500'
+          : 'border-gray-300 text-gray-400'
       }`}
     >
       <svg
-        className={`w-6 h-6 mx-auto mb-1 ${isDragOver ? 'text-blue-400' : 'text-neutral-600'}`}
+        className={`w-5 h-5 mx-auto mb-1 ${isDragOver ? 'text-blue-400' : 'text-gray-300'}`}
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -24,7 +24,7 @@ export function SidebarDropZone() {
           d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
         />
       </svg>
-      <span className="text-xs">拖入文件或文件夹</span>
+      <span className="text-[11px]">Drop files to import</span>
     </div>
   );
 }

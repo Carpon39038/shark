@@ -3,6 +3,7 @@ import { useLibraryStore } from '@/stores/libraryStore';
 import { useSmartFolderStore } from '@/stores/smartFolderStore';
 import { useItemStore } from '@/stores/itemStore';
 import { useFilterStore } from '@/stores/filterStore';
+import { Plus, Search, Clock, FileImage, Image as ImageIcon } from 'lucide-react';
 import type { SmartFolder } from '@/lib/types';
 
 interface SmartFolderListProps {
@@ -83,39 +84,34 @@ export function SmartFolderList({ onEdit, onCreate }: SmartFolderListProps) {
     const children = getChildren(folder.id);
     return (
       <div key={folder.id}>
-        <button
+        <div
           onClick={() => handleSelect(folder)}
           onContextMenu={(e) => handleContextMenu(e, folder)}
-          className={`w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
+          className={`flex items-center justify-between px-3 py-1.5 rounded-md cursor-pointer text-[13px] mb-0.5 ${
             selectedId === folder.id
-              ? 'bg-purple-600/20 text-purple-300'
-              : 'hover:bg-neutral-700 text-neutral-300'
+              ? 'bg-[#0063E1] text-white'
+              : 'hover:bg-gray-200/50 text-gray-700'
           }`}
-          style={{ paddingLeft: `${8 + depth * 16}px` }}
+          style={{ paddingLeft: `${12 + depth * 16}px` }}
         >
-          {folder.name}
-        </button>
+          <div className="flex items-center gap-2">
+            <Clock size={16} className={selectedId === folder.id ? 'text-white' : 'text-blue-400'} />
+            <span className="truncate">{folder.name}</span>
+          </div>
+        </div>
         {children.map((child) => renderFolder(child, depth + 1))}
       </div>
     );
   };
 
   return (
-    <div className="border-t border-neutral-700 pt-2 px-2">
-      <div className="flex items-center justify-between mb-1 px-1">
-        <span className="text-xs font-medium text-neutral-500 uppercase tracking-wider">
-          Smart Folders
-        </span>
-        <button
-          onClick={onCreate}
-          className="text-neutral-500 hover:text-neutral-300 text-xs"
-          title="New Smart Folder"
-        >
-          +
-        </button>
+    <div className="mb-6">
+      <div className="mb-2 flex items-center justify-between px-1">
+        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Smart Folders</span>
+        <Plus size={14} className="text-gray-400 hover:text-gray-600 cursor-pointer" onClick={onCreate} />
       </div>
       {topLevel.length === 0 ? (
-        <p className="text-xs text-neutral-600 px-1">None yet</p>
+        <p className="text-[12px] text-gray-400 px-3">None yet</p>
       ) : (
         topLevel.map((folder) => renderFolder(folder))
       )}
@@ -123,18 +119,18 @@ export function SmartFolderList({ onEdit, onCreate }: SmartFolderListProps) {
       {/* Context menu */}
       {contextMenu && (
         <div
-          className="fixed bg-neutral-800 border border-neutral-600 rounded shadow-lg z-50 py-1"
+          className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           <button
             onClick={handleEdit}
-            className="block w-full text-left px-3 py-1 text-sm text-neutral-300 hover:bg-neutral-700"
+            className="block w-full text-left px-3 py-1 text-[13px] text-gray-700 hover:bg-gray-100"
           >
             Edit
           </button>
           <button
             onClick={handleDelete}
-            className="block w-full text-left px-3 py-1 text-sm text-red-400 hover:bg-neutral-700"
+            className="block w-full text-left px-3 py-1 text-[13px] text-red-500 hover:bg-gray-100"
           >
             Delete
           </button>

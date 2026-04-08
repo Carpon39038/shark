@@ -39,11 +39,11 @@ export function LibrarySelector() {
   };
 
   return (
-    <div className="p-2 border-b border-neutral-700">
+    <div className="mb-4 px-1">
       <select
         value={activeLibraryId ?? ''}
         onChange={(e) => handleSelect(e.target.value)}
-        className="w-full bg-neutral-700 rounded px-2 py-1.5 text-sm border border-neutral-600 focus:border-blue-500 focus:outline-none"
+        className="w-full bg-white border border-gray-200 rounded px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-500"
       >
         <option value="" disabled>
           Select library
@@ -56,7 +56,7 @@ export function LibrarySelector() {
       </select>
       <button
         onClick={() => setShowCreateModal(true)}
-        className="mt-1.5 w-full text-xs text-blue-400 hover:text-blue-300 text-left px-1"
+        className="mt-1 text-xs text-blue-500 hover:text-blue-600 text-left px-1"
       >
         + New Library
       </button>
