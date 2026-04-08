@@ -60,17 +60,28 @@ export function DedupDialog() {
   const resolveAndImport = async () => {
     const state = useUiStore.getState();
     const lib = libraries.find((l) => l.id === activeLibraryId);
-    if (!lib || !state.dedupSourcePath) return;
+    if (!lib) return;
 
     dismissDedupDialog();
     setImporting(true);
 
     try {
-      await invoke<ImportResult>('import_commit', {
-        libraryId: lib.id,
-        sourcePath: state.dedupSourcePath,
-        actions: state.dedupDecisions,
-      });
+      if (state.pendingDropPaths && state.pendingDropPaths.length > 0) {
+        // Drag-drop import
+        await invoke<ImportResult>('import_commit_paths', {
+          libraryId: lib.id,
+          paths: state.pendingDropPaths,
+          actions: state.dedupDecisions,
+        });
+        useUiStore.getState().setPendingDropPaths(null);
+      } else if (state.dedupSourcePath) {
+        // Directory import
+        await invoke<ImportResult>('import_commit', {
+          libraryId: lib.id,
+          sourcePath: state.dedupSourcePath,
+          actions: state.dedupDecisions,
+        });
+      }
 
       if (activeLibraryId) {
         loadItems(activeLibraryId, {}, { field: 'created_at', direction: 'desc' }, { page: 0, page_size: 100 });
