@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { DuplicateInfo, DedupAction } from '@/lib/types';
 
 interface ContextMenu {
   x: number;
@@ -18,6 +19,13 @@ interface UiState {
   importing: boolean;
   importProgress: ImportProgress | null;
   error: string | null;
+  dedupActive: boolean;
+  dedupItems: DuplicateInfo[];
+  dedupCurrentIndex: number;
+  dedupApplyAll: boolean;
+  dedupApplyAllAction: DedupAction | null;
+  dedupDecisions: Record<string, DedupAction>;
+  dedupSourcePath: string | null;
 }
 
 interface UiActions {
@@ -28,6 +36,11 @@ interface UiActions {
   setImporting: (importing: boolean) => void;
   setImportProgress: (progress: ImportProgress | null) => void;
   setError: (msg: string | null) => void;
+  showDedupDialog: (items: DuplicateInfo[], sourcePath: string) => void;
+  dismissDedupDialog: () => void;
+  nextDedupItem: () => void;
+  setDedupApplyAll: (action: DedupAction) => void;
+  setDedupDecision: (sourcePath: string, action: DedupAction) => void;
 }
 
 export const useUiStore = create<UiState & UiActions>()((set) => ({
@@ -37,6 +50,13 @@ export const useUiStore = create<UiState & UiActions>()((set) => ({
   importing: false,
   importProgress: null,
   error: null,
+  dedupActive: false,
+  dedupItems: [],
+  dedupCurrentIndex: 0,
+  dedupApplyAll: false,
+  dedupApplyAllAction: null,
+  dedupDecisions: {},
+  dedupSourcePath: null,
 
   openViewer: (itemId) =>
     set({ viewerOpen: true, viewerItemId: itemId }),
@@ -53,4 +73,39 @@ export const useUiStore = create<UiState & UiActions>()((set) => ({
   setImportProgress: (progress) => set({ importProgress: progress }),
 
   setError: (msg) => set({ error: msg }),
+
+  showDedupDialog: (items, sourcePath) =>
+    set({
+      dedupActive: true,
+      dedupItems: items,
+      dedupCurrentIndex: 0,
+      dedupApplyAll: false,
+      dedupApplyAllAction: null,
+      dedupDecisions: {},
+      dedupSourcePath: sourcePath,
+    }),
+
+  dismissDedupDialog: () =>
+    set({
+      dedupActive: false,
+      dedupItems: [],
+      dedupCurrentIndex: 0,
+      dedupApplyAll: false,
+      dedupApplyAllAction: null,
+      dedupDecisions: {},
+      dedupSourcePath: null,
+    }),
+
+  nextDedupItem: () =>
+    set((state) => ({
+      dedupCurrentIndex: state.dedupCurrentIndex + 1,
+    })),
+
+  setDedupApplyAll: (action) =>
+    set({ dedupApplyAll: true, dedupApplyAllAction: action }),
+
+  setDedupDecision: (sourcePath, action) =>
+    set((state) => ({
+      dedupDecisions: { ...state.dedupDecisions, [sourcePath]: action },
+    })),
 }));
