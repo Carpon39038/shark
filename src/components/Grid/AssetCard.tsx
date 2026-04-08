@@ -2,6 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { Item } from '@/lib/types';
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 interface AssetCardProps {
   item: Item;
   size: number;
@@ -35,18 +41,25 @@ export const AssetCard = React.memo(function AssetCard({
     ? source.startsWith('data:') ? source : convertFileSrc(source)
     : undefined;
 
+  const ext = item.file_name.split('.').pop()?.toUpperCase() || '';
+  const dim = item.width && item.height ? `${item.width}x${item.height}` : '';
+  const sizeStr = item.file_size ? formatFileSize(item.file_size) : '';
+
   return (
     <div
-      className={`shrink-0 rounded overflow-hidden cursor-pointer transition-all ${
-        selected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-neutral-900' : 'hover:ring-1 hover:ring-neutral-500'
+      className={`group relative flex flex-col rounded-lg p-2 cursor-pointer transition-colors ${
+        selected ? 'bg-blue-50' : 'hover:bg-gray-50'
       }`}
       style={{ width: size }}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
     >
       <div
-        className="bg-neutral-800 overflow-hidden"
-        style={{ width: size, height: size }}
+        className={`relative aspect-square rounded-md overflow-hidden bg-gray-100 mb-2 border ${
+          selected
+            ? 'border-blue-500 ring-2 ring-blue-500/20'
+            : 'border-gray-200 group-hover:border-gray-300'
+        }`}
       >
         {thumbSrc && (
           <img
@@ -61,14 +74,29 @@ export const AssetCard = React.memo(function AssetCard({
           />
         )}
         {!loaded && !error && (
-          <div className="w-8 h-8 border-2 border-neutral-600 border-t-neutral-400 rounded-full animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin" />
+          </div>
         )}
         {error && (
-          <span className="text-neutral-600 text-xs">No preview</span>
+          <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">
+            No preview
+          </div>
+        )}
+        {ext && (
+          <div className="absolute bottom-1 right-1 bg-black/60 backdrop-blur-sm text-white text-[10px] px-1.5 py-0.5 rounded">
+            {ext}
+          </div>
         )}
       </div>
-      <div className="px-1.5 py-1 truncate text-xs text-neutral-400">
-        {item.file_name}
+      <div className="px-1">
+        <div className={`text-[12px] font-medium truncate ${selected ? 'text-blue-700' : 'text-gray-800'}`}>
+          {item.file_name}
+        </div>
+        <div className="text-[11px] text-gray-400 flex items-center justify-between mt-0.5">
+          <span>{dim}</span>
+          <span>{sizeStr}</span>
+        </div>
       </div>
     </div>
   );
