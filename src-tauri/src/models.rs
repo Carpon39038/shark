@@ -120,6 +120,41 @@ pub struct ImportResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExistingItemInfo {
+    pub id: String,
+    pub filename: String,
+    pub path: String,
+    pub file_size: i64,
+    pub thumbnail_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewFileInfo {
+    pub source_path: String,
+    pub filename: String,
+    pub file_size: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DuplicateInfo {
+    pub existing: ExistingItemInfo,
+    pub new_file: NewFileInfo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportPrepResult {
+    pub duplicates: Vec<DuplicateInfo>,
+    pub total_prepared: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DedupAction {
+    Skip,
+    KeepBoth,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ThumbnailSize {
     S256,
     S1024,
