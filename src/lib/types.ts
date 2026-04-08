@@ -59,6 +59,32 @@ export interface ImportResult {
   duplicates: number;
 }
 
+export interface ExistingItemInfo {
+  id: string;
+  filename: string;
+  path: string;
+  fileSize: number;
+  thumbnailPath: string | null;
+}
+
+export interface NewFileInfo {
+  sourcePath: string;
+  filename: string;
+  fileSize: number;
+}
+
+export interface DuplicateInfo {
+  existing: ExistingItemInfo;
+  newFile: NewFileInfo;
+}
+
+export interface ImportPrepResult {
+  duplicates: DuplicateInfo[];
+  totalPrepared: number;
+}
+
+export type DedupAction = 'skip' | 'keepBoth';
+
 export type ThumbnailSize = 'S256' | 'S1024';
 
 export interface SearchResult {
