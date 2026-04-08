@@ -26,6 +26,8 @@ interface UiState {
   dedupApplyAllAction: DedupAction | null;
   dedupDecisions: Record<string, DedupAction>;
   dedupSourcePath: string | null;
+  isDragOver: boolean;
+  pendingDropPaths: string[] | null;
 }
 
 interface UiActions {
@@ -41,6 +43,8 @@ interface UiActions {
   nextDedupItem: () => void;
   setDedupApplyAll: (action: DedupAction) => void;
   setDedupDecision: (sourcePath: string, action: DedupAction) => void;
+  setDragOver: (over: boolean) => void;
+  setPendingDropPaths: (paths: string[] | null) => void;
 }
 
 export const useUiStore = create<UiState & UiActions>()((set) => ({
@@ -57,6 +61,8 @@ export const useUiStore = create<UiState & UiActions>()((set) => ({
   dedupApplyAllAction: null,
   dedupDecisions: {},
   dedupSourcePath: null,
+  isDragOver: false,
+  pendingDropPaths: null,
 
   openViewer: (itemId) =>
     set({ viewerOpen: true, viewerItemId: itemId }),
@@ -108,4 +114,8 @@ export const useUiStore = create<UiState & UiActions>()((set) => ({
     set((state) => ({
       dedupDecisions: { ...state.dedupDecisions, [sourcePath]: action },
     })),
+
+  setDragOver: (over) => set({ isDragOver: over }),
+
+  setPendingDropPaths: (paths) => set({ pendingDropPaths: paths }),
 }));
