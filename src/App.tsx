@@ -12,6 +12,7 @@ import { ImageViewer } from '@/components/Viewer/ImageViewer';
 import { ImportProgress } from '@/components/Import/ImportProgress';
 import { DropOverlay } from '@/components/Import/DropOverlay';
 import { DedupDialog } from '@/components/Import/DedupDialog';
+import { Inspector } from '@/components/Inspector/Inspector';
 import type { ImportPrepResult, ImportResult } from '@/lib/types';
 
 const handleDropImport = async (paths: string[]) => {
@@ -60,6 +61,7 @@ const handleDropImport = async (paths: string[]) => {
 
 function App() {
   const sidebarOpen = useViewStore((s) => s.sidebarOpen);
+  const inspectorOpen = useViewStore((s) => s.inspectorOpen);
   const { error, setError } = useUiStore();
 
   useEffect(() => {
@@ -89,9 +91,9 @@ function App() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen bg-neutral-900 text-white select-none">
+    <div className="h-screen w-screen flex flex-col bg-white text-[#333333] font-sans overflow-hidden select-none">
       {error && (
-        <div className="fixed top-4 right-4 z-50 bg-red-600 text-white px-4 py-2 rounded shadow-lg text-sm">
+        <div className="fixed top-4 right-4 z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
           {error}
           <button onClick={() => setError(null)} className="ml-2 underline">Dismiss</button>
         </div>
@@ -100,6 +102,7 @@ function App() {
       <div className="flex flex-1 overflow-hidden">
         {sidebarOpen && <Sidebar />}
         <VirtualGrid />
+        {inspectorOpen && <Inspector />}
       </div>
       <ImageViewer />
       <ImportProgress />
