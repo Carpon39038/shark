@@ -5,6 +5,7 @@ import { useViewStore } from '@/stores/viewStore';
 import { useUiStore } from '@/stores/uiStore';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { AssetCard } from './AssetCard';
+import { ChevronDown } from 'lucide-react';
 
 export function VirtualGrid() {
   const { items, selectedIds, thumbnailPaths, toggleSelect, selectRange, clearSelection } = useItemStore();
@@ -23,7 +24,7 @@ export function VirtualGrid() {
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const width = entry.contentRect.width;
-        const gap = 8;
+        const gap = 16;
         const cols = Math.max(1, Math.floor((width + gap) / (gridSize + gap)));
         setColumnCount(cols);
       }
@@ -37,7 +38,7 @@ export function VirtualGrid() {
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => gridSize + 32, // thumbnail + filename
+    estimateSize: () => gridSize + 50, // thumbnail + filename + padding
     overscan: 5,
   });
 
@@ -66,66 +67,101 @@ export function VirtualGrid() {
 
   if (!activeLibraryId) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-neutral-500 gap-2">
-        <svg width="48" height="48" viewBox="0 0 48 48" fill="currentColor" className="text-neutral-600 mb-2">
-          <rect x="4" y="8" width="40" height="32" rx="3" fill="none" stroke="currentColor" strokeWidth="2" />
-          <circle cx="16" cy="22" r="4" fill="none" stroke="currentColor" strokeWidth="2" />
-          <path d="M4 32l10-8 8 6 8-10 14 12" fill="none" stroke="currentColor" strokeWidth="2" />
+      <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-2">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 mb-2">
+          <rect x="4" y="8" width="40" height="32" rx="3" />
+          <circle cx="16" cy="22" r="4" />
+          <path d="M4 32l10-8 8 6 8-10 14 12" />
         </svg>
-        <span className="text-base font-medium text-neutral-400">Welcome to Shark</span>
-        <span className="text-sm">Create a library in the sidebar to get started.</span>
+        <span className="text-base font-medium text-gray-400">Welcome to Shark</span>
+        <span className="text-sm text-gray-400">Create a library in the sidebar to get started.</span>
       </div>
     );
   }
 
   if (items.length === 0) {
     return (
-      <div ref={parentRef} className="flex-1 flex items-center justify-center text-neutral-500 text-sm">
-        No items yet. Click Import to add files.
+      <div className="flex-1 flex flex-col bg-white">
+        <div className="h-10 border-b border-gray-100 flex items-center px-4 gap-4 text-[12px] text-gray-500 shrink-0">
+          <div className="flex items-center gap-1 hover:text-gray-800 cursor-pointer">
+            <span>Date Added</span>
+            <ChevronDown size={14} />
+          </div>
+          <div className="flex items-center gap-1 hover:text-gray-800 cursor-pointer">
+            <span>Types</span>
+            <ChevronDown size={14} />
+          </div>
+          <div className="flex items-center gap-1 hover:text-gray-800 cursor-pointer">
+            <span>Tags</span>
+            <ChevronDown size={14} />
+          </div>
+        </div>
+        <div ref={parentRef} className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+          No items yet. Click + to import files.
+        </div>
       </div>
     );
   }
 
   return (
-    <div ref={parentRef} className="flex-1 overflow-y-auto">
-      <div
-        style={{
-          height: `${rowVirtualizer.getTotalSize()}px`,
-          width: '100%',
-          position: 'relative',
-        }}
-      >
-        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-          const startIdx = virtualRow.index * columnCount;
-          const rowItems = items.slice(startIdx, startIdx + columnCount);
+    <div className="flex-1 flex flex-col bg-white overflow-hidden">
+      {/* Filter Bar */}
+      <div className="h-10 border-b border-gray-100 flex items-center px-4 gap-4 text-[12px] text-gray-500 shrink-0">
+        <div className="flex items-center gap-1 hover:text-gray-800 cursor-pointer">
+          <span>Date Added</span>
+          <ChevronDown size={14} />
+        </div>
+        <div className="flex items-center gap-1 hover:text-gray-800 cursor-pointer">
+          <span>Types</span>
+          <ChevronDown size={14} />
+        </div>
+        <div className="flex items-center gap-1 hover:text-gray-800 cursor-pointer">
+          <span>Tags</span>
+          <ChevronDown size={14} />
+        </div>
+      </div>
 
-          return (
-            <div
-              key={virtualRow.index}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: `${virtualRow.size}px`,
-                transform: `translateY(${virtualRow.start}px)`,
-              }}
-              className="flex gap-2 px-3"
-            >
-              {rowItems.map((item) => (
-                <AssetCard
-                  key={item.id}
-                  item={item}
-                  size={gridSize}
-                  selected={selectedIds.has(item.id)}
-                  thumbnailPath={thumbnailPaths[item.id]}
-                  onClick={(e) => handleClick(e, item.id)}
-                  onDoubleClick={() => handleDoubleClick(item.id)}
-                />
-              ))}
-            </div>
-          );
-        })}
+      {/* Grid */}
+      <div ref={parentRef} className="flex-1 overflow-y-auto p-4">
+        <div
+          style={{
+            height: `${rowVirtualizer.getTotalSize()}px`,
+            width: '100%',
+            position: 'relative',
+          }}
+        >
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            const startIdx = virtualRow.index * columnCount;
+            const rowItems = items.slice(startIdx, startIdx + columnCount);
+
+            return (
+              <div
+                key={virtualRow.index}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: `${virtualRow.size}px`,
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+                className="flex gap-4 px-0"
+              >
+                {rowItems.map((item) => (
+                  <AssetCard
+                    key={item.id}
+                    item={item}
+                    size={gridSize}
+                    selected={selectedIds.has(item.id)}
+                    thumbnailPath={thumbnailPaths[item.id]}
+                    onClick={(e) => handleClick(e, item.id)}
+                    onDoubleClick={() => handleDoubleClick(item.id)}
+                  />
+                ))}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
