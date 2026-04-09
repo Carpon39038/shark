@@ -95,29 +95,29 @@ export function SmartFolderEditor({ folder, onClose }: SmartFolderEditorProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl w-[480px] max-h-[80vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div className="bg-white border border-gray-200 rounded-lg shadow-xl w-[480px] max-h-[80vh] overflow-y-auto">
         <div className="p-4">
-          <h2 className="text-lg font-semibold text-white mb-4">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">
             {folder ? 'Edit Smart Folder' : 'New Smart Folder'}
           </h2>
 
           {/* Name */}
-          <label className="block text-sm text-neutral-400 mb-1">Name</label>
+          <label className="block text-sm text-gray-500 mb-1">Name</label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full bg-neutral-700 border border-neutral-600 rounded px-3 py-2 text-sm text-white mb-4"
+            className="w-full bg-white border border-gray-200 rounded px-3 py-2 text-sm text-gray-800 mb-4"
             placeholder="e.g. Best Photos"
           />
 
           {/* Match operator */}
-          <label className="block text-sm text-neutral-400 mb-1">Match</label>
+          <label className="block text-sm text-gray-500 mb-1">Match</label>
           <select
             value={operator}
             onChange={(e) => setOperator(e.target.value as 'AND' | 'OR')}
-            className="bg-neutral-700 border border-neutral-600 rounded px-3 py-2 text-sm text-white mb-3"
+            className="bg-white border border-gray-200 rounded px-3 py-2 text-sm text-gray-800 mb-3"
           >
             <option value="AND">ALL conditions</option>
             <option value="OR">ANY condition</option>
@@ -138,7 +138,7 @@ export function SmartFolderEditor({ folder, onClose }: SmartFolderEditorProps) {
 
           <button
             onClick={addCondition}
-            className="text-sm text-blue-400 hover:text-blue-300 mb-4"
+            className="text-sm text-blue-500 hover:text-blue-600 mb-4"
           >
             + Add Condition
           </button>
@@ -147,7 +147,7 @@ export function SmartFolderEditor({ folder, onClose }: SmartFolderEditorProps) {
           <div className="flex justify-end gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm text-neutral-400 hover:text-white"
+              className="px-4 py-2 text-sm text-gray-500 hover:text-gray-800"
             >
               Cancel
             </button>
@@ -186,7 +186,7 @@ function ConditionRow({
       <select
         value={condition.field}
         onChange={(e) => onChange({ field: e.target.value })}
-        className="bg-neutral-700 border border-neutral-600 rounded px-2 py-1.5 text-sm text-white"
+        className="bg-white border border-gray-200 rounded px-2 py-1.5 text-sm text-gray-800"
       >
         {ALL_FIELDS.map((f) => (
           <option key={f} value={f}>
@@ -199,7 +199,7 @@ function ConditionRow({
       <select
         value={condition.op}
         onChange={(e) => onChange({ op: e.target.value })}
-        className="bg-neutral-700 border border-neutral-600 rounded px-2 py-1.5 text-sm text-white"
+        className="bg-white border border-gray-200 rounded px-2 py-1.5 text-sm text-gray-800"
       >
         {operators.map((o) => (
           <option key={o.value} value={o.value}>
@@ -219,9 +219,9 @@ function ConditionRow({
               arr[0] = kind === 'number' ? Number(e.target.value) : e.target.value;
               onChange({ value: arr });
             }}
-            className="w-20 bg-neutral-700 border border-neutral-600 rounded px-2 py-1.5 text-sm text-white"
+            className="w-20 bg-white border border-gray-200 rounded px-2 py-1.5 text-sm text-gray-800"
           />
-          <span className="text-neutral-500 self-center">~</span>
+          <span className="text-gray-400 self-center">~</span>
           <input
             type={kind === 'number' ? 'number' : kind === 'date' ? 'date' : 'text'}
             value={Array.isArray(condition.value) ? condition.value[1] ?? '' : ''}
@@ -230,7 +230,7 @@ function ConditionRow({
               arr[1] = kind === 'number' ? Number(e.target.value) : e.target.value;
               onChange({ value: arr });
             }}
-            className="w-20 bg-neutral-700 border border-neutral-600 rounded px-2 py-1.5 text-sm text-white"
+            className="w-20 bg-white border border-gray-200 rounded px-2 py-1.5 text-sm text-gray-800"
           />
         </div>
       ) : condition.op === 'in' || condition.op === 'not_in' ? (
@@ -242,7 +242,7 @@ function ConditionRow({
             onChange({ value: vals });
           }}
           placeholder="JPG, PNG, ..."
-          className="flex-1 bg-neutral-700 border border-neutral-600 rounded px-2 py-1.5 text-sm text-white"
+          className="flex-1 bg-white border border-gray-200 rounded px-2 py-1.5 text-sm text-gray-800"
         />
       ) : (
         <input
@@ -253,7 +253,7 @@ function ConditionRow({
               value: kind === 'number' ? Number(e.target.value) : e.target.value,
             })
           }
-          className="flex-1 bg-neutral-700 border border-neutral-600 rounded px-2 py-1.5 text-sm text-white"
+          className="flex-1 bg-white border border-gray-200 rounded px-2 py-1.5 text-sm text-gray-800"
         />
       )}
 
@@ -261,7 +261,7 @@ function ConditionRow({
       {showRemove && (
         <button
           onClick={onRemove}
-          className="text-neutral-500 hover:text-red-400 text-sm"
+          className="text-gray-400 hover:text-red-500 text-sm"
         >
           x
         </button>
