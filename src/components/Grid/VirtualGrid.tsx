@@ -67,14 +67,14 @@ export function VirtualGrid() {
 
   if (!activeLibraryId) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-2">
-        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-300 mb-2">
+      <div className="flex-1 flex flex-col items-center justify-center text-[#999999] gap-2">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[#E5E5E5] mb-2">
           <rect x="4" y="8" width="40" height="32" rx="3" />
           <circle cx="16" cy="22" r="4" />
           <path d="M4 32l10-8 8 6 8-10 14 12" />
         </svg>
-        <span className="text-base font-medium text-gray-400">Welcome to Shark</span>
-        <span className="text-sm text-gray-400">Create a library in the sidebar to get started.</span>
+        <span className="text-[17px] font-semibold text-[#1D1D1F]">Welcome to Shark</span>
+        <span className="text-[13px] text-[#999999]">Create a library in the sidebar to get started.</span>
       </div>
     );
   }
@@ -82,21 +82,21 @@ export function VirtualGrid() {
   if (items.length === 0) {
     return (
       <div className="flex-1 flex flex-col bg-white">
-        <div className="h-10 border-b border-gray-100 flex items-center px-4 gap-4 text-[12px] text-gray-500 shrink-0">
-          <div className="flex items-center gap-1 hover:text-gray-800 cursor-pointer">
+        <div className="h-10 border-b border-[#F0F0F0] flex items-center px-4 gap-4 text-[12px] text-[#666666] shrink-0">
+          <div className="flex items-center gap-1 hover:text-[#1D1D1F] cursor-pointer">
             <span>Date Added</span>
             <ChevronDown size={14} />
           </div>
-          <div className="flex items-center gap-1 hover:text-gray-800 cursor-pointer">
+          <div className="flex items-center gap-1 hover:text-[#1D1D1F] cursor-pointer">
             <span>Types</span>
             <ChevronDown size={14} />
           </div>
-          <div className="flex items-center gap-1 hover:text-gray-800 cursor-pointer">
+          <div className="flex items-center gap-1 hover:text-[#1D1D1F] cursor-pointer">
             <span>Tags</span>
             <ChevronDown size={14} />
           </div>
         </div>
-        <div ref={parentRef} className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+        <div ref={parentRef} className="flex-1 flex items-center justify-center text-[#999999] text-[13px]">
           No items yet. Click + to import files.
         </div>
       </div>
@@ -106,16 +106,16 @@ export function VirtualGrid() {
   return (
     <div className="flex-1 flex flex-col bg-white overflow-hidden">
       {/* Filter Bar */}
-      <div className="h-10 border-b border-gray-100 flex items-center px-4 gap-4 text-[12px] text-gray-500 shrink-0">
-        <div className="flex items-center gap-1 hover:text-gray-800 cursor-pointer">
+      <div className="h-10 border-b border-[#F0F0F0] flex items-center px-4 gap-4 text-[12px] text-[#666666] shrink-0">
+        <div className="flex items-center gap-1 hover:text-[#1D1D1F] cursor-pointer">
           <span>Date Added</span>
           <ChevronDown size={14} />
         </div>
-        <div className="flex items-center gap-1 hover:text-gray-800 cursor-pointer">
+        <div className="flex items-center gap-1 hover:text-[#1D1D1F] cursor-pointer">
           <span>Types</span>
           <ChevronDown size={14} />
         </div>
-        <div className="flex items-center gap-1 hover:text-gray-800 cursor-pointer">
+        <div className="flex items-center gap-1 hover:text-[#1D1D1F] cursor-pointer">
           <span>Tags</span>
           <ChevronDown size={14} />
         </div>

@@ -90,12 +90,12 @@ export function SmartFolderList({ onEdit, onCreate }: SmartFolderListProps) {
           className={`flex items-center justify-between px-3 py-1.5 rounded-md cursor-pointer text-[13px] mb-0.5 ${
             selectedId === folder.id
               ? 'bg-[#0063E1] text-white'
-              : 'hover:bg-gray-200/50 text-gray-700'
+              : 'hover:bg-[#ECECEC] text-[#333333]'
           }`}
           style={{ paddingLeft: `${12 + depth * 16}px` }}
         >
           <div className="flex items-center gap-2">
-            <Clock size={16} className={selectedId === folder.id ? 'text-white' : 'text-blue-400'} />
+            <Clock size={16} className={selectedId === folder.id ? 'text-white' : 'text-[#0063E1]'} />
             <span className="truncate">{folder.name}</span>
           </div>
         </div>
@@ -107,11 +107,11 @@ export function SmartFolderList({ onEdit, onCreate }: SmartFolderListProps) {
   return (
     <div className="mb-6">
       <div className="mb-2 flex items-center justify-between px-1">
-        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Smart Folders</span>
-        <Plus size={14} className="text-gray-400 hover:text-gray-600 cursor-pointer" onClick={onCreate} />
+        <span className="text-[11px] font-semibold text-[#999999] uppercase tracking-wider">Smart Folders</span>
+        <Plus size={14} className="text-[#999999] hover:text-[#666666] cursor-pointer" onClick={onCreate} />
       </div>
       {topLevel.length === 0 ? (
-        <p className="text-[12px] text-gray-400 px-3">None yet</p>
+        <p className="text-[12px] text-[#999999] px-3">None yet</p>
       ) : (
         topLevel.map((folder) => renderFolder(folder))
       )}
@@ -119,18 +119,18 @@ export function SmartFolderList({ onEdit, onCreate }: SmartFolderListProps) {
       {/* Context menu */}
       {contextMenu && (
         <div
-          className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1"
+          className="fixed bg-white border border-[#E5E5E5] rounded-lg shadow-lg z-50 py-1"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           <button
             onClick={handleEdit}
-            className="block w-full text-left px-3 py-1 text-[13px] text-gray-700 hover:bg-gray-100"
+            className="block w-full text-left px-3 py-1 text-[13px] text-[#333333] hover:bg-[#F0F0F0]"
           >
             Edit
           </button>
           <button
             onClick={handleDelete}
-            className="block w-full text-left px-3 py-1 text-[13px] text-red-500 hover:bg-gray-100"
+            className="block w-full text-left px-3 py-1 text-[13px] text-[#FF3B30] hover:bg-[#F0F0F0]"
           >
             Delete
           </button>

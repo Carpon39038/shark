@@ -5,6 +5,7 @@ import { useItemStore } from '@/stores/itemStore';
 import { useUiStore } from '@/stores/uiStore';
 import { CreateLibraryModal } from './CreateLibraryModal';
 import type { Library } from '@/lib/types';
+import { Select } from '@/components/ui/Select';
 
 export function LibrarySelector() {
   const { libraries, activeLibraryId, setLibraries, setActiveLibrary, addLibrary } = useLibraryStore();
@@ -40,10 +41,9 @@ export function LibrarySelector() {
 
   return (
     <div className="mb-4 px-1">
-      <select
+      <Select
         value={activeLibraryId ?? ''}
         onChange={(e) => handleSelect(e.target.value)}
-        className="w-full bg-white border border-gray-200 rounded px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-500"
       >
         <option value="" disabled>
           Select library
@@ -53,10 +53,10 @@ export function LibrarySelector() {
             {lib.name}
           </option>
         ))}
-      </select>
+      </Select>
       <button
         onClick={() => setShowCreateModal(true)}
-        className="mt-1 text-xs text-blue-500 hover:text-blue-600 text-left px-1"
+        className="mt-1 text-[12px] text-[#0063E1] hover:text-[#0052CC] text-left px-1"
       >
         + New Library
       </button>

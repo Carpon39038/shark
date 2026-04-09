@@ -7,12 +7,12 @@ export function SidebarDropZone() {
     <div
       className={`mt-auto mx-1 mb-1 rounded-lg border-2 border-dashed p-3 text-center transition-colors ${
         isDragOver
-          ? 'border-blue-400 bg-blue-50 text-blue-500'
-          : 'border-gray-300 text-gray-400'
+          ? 'border-[#0063E1] bg-[#EBF5FF] text-[#0063E1]'
+          : 'border-[#E5E5E5] text-[#999999]'
       }`}
     >
       <svg
-        className={`w-5 h-5 mx-auto mb-1 ${isDragOver ? 'text-blue-400' : 'text-gray-300'}`}
+        className={`w-5 h-5 mx-auto mb-1 ${isDragOver ? 'text-[#0063E1]' : 'text-[#E5E5E5]'}`}
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"

@@ -10,6 +10,8 @@ import {
   FILE_TYPE_OPERATORS,
 } from '@/lib/types';
 import { useSmartFolderStore } from '@/stores/smartFolderStore';
+import { TextInput } from '@/components/ui/TextInput';
+import { Select } from '@/components/ui/Select';
 
 interface SmartFolderEditorProps {
   folder?: SmartFolder | null; // null = create new
@@ -96,32 +98,32 @@ export function SmartFolderEditor({ folder, onClose }: SmartFolderEditorProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="bg-white border border-gray-200 rounded-lg shadow-xl w-[480px] max-h-[80vh] overflow-y-auto">
+      <div className="bg-white border border-[#E5E5E5] rounded-lg shadow-xl w-[480px] max-h-[80vh] overflow-y-auto">
         <div className="p-4">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">
+          <h2 className="text-lg font-semibold text-[#1D1D1F] mb-4">
             {folder ? 'Edit Smart Folder' : 'New Smart Folder'}
           </h2>
 
           {/* Name */}
-          <label className="block text-sm text-gray-500 mb-1">Name</label>
-          <input
+          <label className="block text-[13px] text-[#666666] mb-1">Name</label>
+          <TextInput
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full bg-white border border-gray-200 rounded px-3 py-2 text-sm text-gray-800 mb-4"
+            className="mb-4"
             placeholder="e.g. Best Photos"
           />
 
           {/* Match operator */}
-          <label className="block text-sm text-gray-500 mb-1">Match</label>
-          <select
+          <label className="block text-[13px] text-[#666666] mb-1">Match</label>
+          <Select
             value={operator}
             onChange={(e) => setOperator(e.target.value as 'AND' | 'OR')}
-            className="bg-white border border-gray-200 rounded px-3 py-2 text-sm text-gray-800 mb-3"
+            className="mb-3"
           >
             <option value="AND">ALL conditions</option>
             <option value="OR">ANY condition</option>
-          </select>
+          </Select>
 
           {/* Conditions */}
           <div className="space-y-2 mb-3">
@@ -138,7 +140,7 @@ export function SmartFolderEditor({ folder, onClose }: SmartFolderEditorProps) {
 
           <button
             onClick={addCondition}
-            className="text-sm text-blue-500 hover:text-blue-600 mb-4"
+            className="text-[13px] text-[#0063E1] hover:text-[#0052CC] mb-4"
           >
             + Add Condition
           </button>
@@ -147,14 +149,14 @@ export function SmartFolderEditor({ folder, onClose }: SmartFolderEditorProps) {
           <div className="flex justify-end gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm text-gray-500 hover:text-gray-800"
+              className="px-4 py-1.5 text-[13px] text-[#666666] hover:text-[#1D1D1F]"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={saving || !name.trim()}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-500 disabled:opacity-50"
+              className="px-4 py-1.5 text-[13px] bg-[#0063E1] text-white rounded-md hover:bg-[#0052CC] disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-colors duration-150"
             >
               {saving ? 'Saving...' : 'Save'}
             </button>
@@ -183,35 +185,33 @@ function ConditionRow({
   return (
     <div className="flex items-center gap-2">
       {/* Field selector */}
-      <select
+      <Select
         value={condition.field}
         onChange={(e) => onChange({ field: e.target.value })}
-        className="bg-white border border-gray-200 rounded px-2 py-1.5 text-sm text-gray-800"
       >
         {ALL_FIELDS.map((f) => (
           <option key={f} value={f}>
             {FIELD_LABELS[f]}
           </option>
         ))}
-      </select>
+      </Select>
 
       {/* Operator selector */}
-      <select
+      <Select
         value={condition.op}
         onChange={(e) => onChange({ op: e.target.value })}
-        className="bg-white border border-gray-200 rounded px-2 py-1.5 text-sm text-gray-800"
       >
         {operators.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>
         ))}
-      </select>
+      </Select>
 
       {/* Value input(s) */}
       {condition.op === 'between' ? (
         <div className="flex gap-1">
-          <input
+          <TextInput
             type={kind === 'number' ? 'number' : kind === 'date' ? 'date' : 'text'}
             value={Array.isArray(condition.value) ? condition.value[0] ?? '' : ''}
             onChange={(e) => {
@@ -219,10 +219,10 @@ function ConditionRow({
               arr[0] = kind === 'number' ? Number(e.target.value) : e.target.value;
               onChange({ value: arr });
             }}
-            className="w-20 bg-white border border-gray-200 rounded px-2 py-1.5 text-sm text-gray-800"
+            className="w-20"
           />
-          <span className="text-gray-400 self-center">~</span>
-          <input
+          <span className="text-[#999999] self-center">~</span>
+          <TextInput
             type={kind === 'number' ? 'number' : kind === 'date' ? 'date' : 'text'}
             value={Array.isArray(condition.value) ? condition.value[1] ?? '' : ''}
             onChange={(e) => {
@@ -230,11 +230,11 @@ function ConditionRow({
               arr[1] = kind === 'number' ? Number(e.target.value) : e.target.value;
               onChange({ value: arr });
             }}
-            className="w-20 bg-white border border-gray-200 rounded px-2 py-1.5 text-sm text-gray-800"
+            className="w-20"
           />
         </div>
       ) : condition.op === 'in' || condition.op === 'not_in' ? (
-        <input
+        <TextInput
           type="text"
           value={Array.isArray(condition.value) ? condition.value.join(', ') : ''}
           onChange={(e) => {
@@ -242,10 +242,10 @@ function ConditionRow({
             onChange({ value: vals });
           }}
           placeholder="JPG, PNG, ..."
-          className="flex-1 bg-white border border-gray-200 rounded px-2 py-1.5 text-sm text-gray-800"
+          className="flex-1"
         />
       ) : (
-        <input
+        <TextInput
           type={kind === 'number' ? 'number' : kind === 'date' ? 'date' : 'text'}
           value={condition.value as string | number}
           onChange={(e) =>
@@ -253,7 +253,7 @@ function ConditionRow({
               value: kind === 'number' ? Number(e.target.value) : e.target.value,
             })
           }
-          className="flex-1 bg-white border border-gray-200 rounded px-2 py-1.5 text-sm text-gray-800"
+          className="flex-1"
         />
       )}
 
@@ -261,7 +261,7 @@ function ConditionRow({
       {showRemove && (
         <button
           onClick={onRemove}
-          className="text-gray-400 hover:text-red-500 text-sm"
+          className="text-[#999999] hover:text-[#FF3B30] text-[13px]"
         >
           x
         </button>

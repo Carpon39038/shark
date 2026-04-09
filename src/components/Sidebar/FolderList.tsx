@@ -48,7 +48,7 @@ export function FolderList() {
     }
   };
 
-  const NavItem = ({ id, icon: Icon, label, color = 'text-gray-600' }: {
+  const NavItem = ({ id, icon: Icon, label, color = 'text-[#666666]' }: {
     id: string | null;
     icon: React.ComponentType<{ size?: number; className?: string }>;
     label: string;
@@ -59,7 +59,7 @@ export function FolderList() {
       <div
         onClick={() => handleSelectFolder(id)}
         className={`flex items-center justify-between px-3 py-1.5 rounded-md cursor-pointer text-[13px] mb-0.5 ${
-          isActive ? 'bg-[#0063E1] text-white' : 'hover:bg-gray-200/50 text-gray-700'
+          isActive ? 'bg-[#0063E1] text-white' : 'hover:bg-[#ECECEC] text-[#333333]'
         }`}
       >
         <div className="flex items-center gap-2">
@@ -73,17 +73,17 @@ export function FolderList() {
   return (
     <div className="flex-1 mb-6">
       <div className="mb-3">
-        <NavItem id={null} icon={ImageIcon} label="All Items" color="text-blue-500" />
-        <NavItem id="__uncategorized" icon={Folder} label="Uncategorized" color="text-gray-400" />
-        <NavItem id="__untagged" icon={Tag} label="Untagged" color="text-gray-400" />
-        <NavItem id="__random" icon={Star} label="Random" color="text-yellow-500" />
-        <NavItem id="__trash" icon={Trash2} label="Trash" color="text-gray-400" />
+        <NavItem id={null} icon={ImageIcon} label="All Items" color="text-[#0063E1]" />
+        <NavItem id="__uncategorized" icon={Folder} label="Uncategorized" color="text-[#999999]" />
+        <NavItem id="__untagged" icon={Tag} label="Untagged" color="text-[#999999]" />
+        <NavItem id="__random" icon={Star} label="Random" color="text-[#FF9500]" />
+        <NavItem id="__trash" icon={Trash2} label="Trash" color="text-[#999999]" />
       </div>
 
       {folders.length > 0 && (
         <>
           <div className="mb-2 flex items-center justify-between px-1">
-            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Folders</span>
+            <span className="text-[11px] font-semibold text-[#999999] uppercase tracking-wider">Folders</span>
           </div>
           <div>
             {folders.map((folder) => (
@@ -93,11 +93,11 @@ export function FolderList() {
                 className={`flex items-center justify-between px-3 py-1.5 rounded-md cursor-pointer text-[13px] mb-0.5 ${
                   selectedFolder === folder.id
                     ? 'bg-[#0063E1] text-white'
-                    : 'hover:bg-gray-200/50 text-gray-700'
+                    : 'hover:bg-[#ECECEC] text-[#333333]'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <Folder size={16} className={selectedFolder === folder.id ? 'text-white' : 'text-blue-500'} />
+                  <Folder size={16} className={selectedFolder === folder.id ? 'text-white' : 'text-[#0063E1]'} />
                   <span className="truncate">{folder.name}</span>
                 </div>
               </div>

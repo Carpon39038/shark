@@ -93,7 +93,7 @@ function App() {
   return (
     <div className="h-screen w-screen flex flex-col bg-white text-[#333333] font-sans overflow-hidden select-none">
       {error && (
-        <div className="fixed top-4 right-4 z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
+        <div className="fixed top-4 right-4 z-50 bg-[#FF3B30] text-white px-4 py-2 rounded-lg shadow-lg text-[13px]">
           {error}
           <button onClick={() => setError(null)} className="ml-2 underline">Dismiss</button>
         </div>

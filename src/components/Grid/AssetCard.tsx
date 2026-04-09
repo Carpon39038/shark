@@ -47,8 +47,8 @@ export const AssetCard = React.memo(function AssetCard({
 
   return (
     <div
-      className={`group relative flex flex-col rounded-lg p-2 cursor-pointer transition-colors ${
-        selected ? 'bg-blue-50' : 'hover:bg-gray-50'
+      className={`group relative flex flex-col rounded-md p-2 cursor-pointer transition-colors ${
+        selected ? 'bg-[#EBF5FF]' : 'hover:bg-gray-50'
       }`}
       style={{ width: size }}
       onClick={onClick}
@@ -57,7 +57,7 @@ export const AssetCard = React.memo(function AssetCard({
       <div
         className={`relative aspect-square rounded-md overflow-hidden bg-gray-100 mb-2 border ${
           selected
-            ? 'border-blue-500 ring-2 ring-blue-500/20'
+            ? 'border-[#0063E1] ring-2 ring-[#0063E1]/20'
             : 'border-gray-200 group-hover:border-gray-300'
         }`}
       >
@@ -79,7 +79,7 @@ export const AssetCard = React.memo(function AssetCard({
           </div>
         )}
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">
+          <div className="absolute inset-0 flex items-center justify-center text-[#999999] text-[11px]">
             No preview
           </div>
         )}
@@ -90,10 +90,10 @@ export const AssetCard = React.memo(function AssetCard({
         )}
       </div>
       <div className="px-1">
-        <div className={`text-[12px] font-medium truncate ${selected ? 'text-blue-700' : 'text-gray-800'}`}>
+        <div className={`text-[13px] font-medium truncate ${selected ? 'text-[#0063E1]' : 'text-[#1D1D1F]'}`}>
           {item.file_name}
         </div>
-        <div className="text-[11px] text-gray-400 flex items-center justify-between mt-0.5">
+        <div className="text-[11px] text-[#999999] flex items-center justify-between mt-0.5">
           <span>{dim}</span>
           <span>{sizeStr}</span>
         </div>

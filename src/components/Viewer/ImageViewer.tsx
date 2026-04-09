@@ -51,8 +51,8 @@ export function ImageViewer() {
         onClick={(e) => e.stopPropagation()}
       />
       <div className="absolute bottom-0 left-0 right-0 px-4 py-3 bg-gradient-to-t from-black/80 to-transparent flex items-center justify-between">
-        <span className="text-sm text-neutral-300 truncate">{item.file_name}</span>
-        <span className="text-xs text-neutral-500">
+        <span className="text-[13px] text-neutral-300 truncate">{item.file_name}</span>
+        <span className="text-[11px] text-neutral-500">
           {item.width && item.height ? `${item.width} x ${item.height}` : ''}
           {currentIndex >= 0 && ` | ${currentIndex + 1} / ${items.length}`}
         </span>

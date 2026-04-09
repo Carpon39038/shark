@@ -105,15 +105,15 @@ export function DedupDialog() {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center">
-      <div className="bg-white rounded-lg p-5 w-[520px] shadow-xl border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">
+      <div className="bg-white rounded-lg p-5 w-[520px] shadow-xl border border-[#E5E5E5]">
+        <h2 className="text-lg font-semibold text-[#1D1D1F] mb-4">
           Duplicate Found ({dedupCurrentIndex + 1}/{dedupItems.length})
         </h2>
 
         <div className="flex gap-4 mb-4">
           {/* Existing file */}
-          <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg p-3">
-            <div className="text-xs text-gray-500 mb-2">Existing</div>
+          <div className="flex-1 bg-gray-50 border border-[#E5E5E5] rounded-md p-3">
+            <div className="text-[11px] text-[#666666] mb-2">Existing</div>
             {current.existing.thumbnailPath && (
               <img
                 src={current.existing.thumbnailPath}
@@ -121,30 +121,30 @@ export function DedupDialog() {
                 className="w-full aspect-square object-cover rounded mb-2"
               />
             )}
-            <div className="text-sm text-gray-800 font-medium truncate">
+            <div className="text-[13px] text-[#333333] font-medium truncate">
               {current.existing.filename}
             </div>
-            <div className="text-xs text-gray-500 truncate">
+            <div className="text-[11px] text-[#666666] truncate">
               {truncatePath(current.existing.path)}
             </div>
-            <div className="text-xs text-gray-400 mt-1">
+            <div className="text-[11px] text-[#999999] mt-1">
               {formatFileSize(current.existing.fileSize)}
             </div>
           </div>
 
           {/* New file */}
-          <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg p-3">
-            <div className="text-xs text-gray-500 mb-2">New File</div>
-            <div className="w-full aspect-square bg-gray-200 rounded mb-2 flex items-center justify-center text-gray-400 text-xs">
+          <div className="flex-1 bg-gray-50 border border-[#E5E5E5] rounded-md p-3">
+            <div className="text-[11px] text-[#666666] mb-2">New File</div>
+            <div className="w-full aspect-square bg-[#F0F0F0] rounded mb-2 flex items-center justify-center text-[#999999] text-[11px]">
               No preview
             </div>
-            <div className="text-sm text-gray-800 font-medium truncate">
+            <div className="text-[13px] text-[#333333] font-medium truncate">
               {current.newFile.filename}
             </div>
-            <div className="text-xs text-gray-500 truncate">
+            <div className="text-[11px] text-[#666666] truncate">
               {truncatePath(current.newFile.sourcePath)}
             </div>
-            <div className="text-xs text-gray-400 mt-1">
+            <div className="text-[11px] text-[#999999] mt-1">
               {formatFileSize(current.newFile.fileSize)}
             </div>
           </div>
@@ -159,9 +159,9 @@ export function DedupDialog() {
               onChange={(e) => {
                 useUiStore.setState({ dedupApplyAll: e.target.checked });
               }}
-              className="rounded border-gray-300"
+              className="rounded border-[#E5E5E5]"
             />
-            <span className="text-sm text-gray-600">
+            <span className="text-[13px] text-[#666666]">
               Apply to all remaining ({remaining - 1})
             </span>
           </label>
@@ -171,19 +171,19 @@ export function DedupDialog() {
         <div className="flex gap-3 justify-end">
           <button
             onClick={handleSkipAll}
-            className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+            className="px-3 py-1.5 text-[13px] text-[#666666] hover:text-[#1D1D1F] transition-colors duration-150"
           >
             Skip All
           </button>
           <button
             onClick={() => handleDecision('skip')}
-            className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 rounded text-sm font-medium text-gray-700 transition-colors"
+            className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-md text-[13px] font-medium text-[#333333] transition-colors duration-150"
           >
             Skip
           </button>
           <button
             onClick={() => handleDecision('keepBoth')}
-            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium text-white transition-colors"
+            className="px-4 py-1.5 bg-[#0063E1] hover:bg-[#0052CC] active:bg-[#003FA3] rounded-md text-[13px] font-medium text-white transition-colors duration-150"
           >
             Keep Both
           </button>

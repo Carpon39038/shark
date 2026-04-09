@@ -1,6 +1,7 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useItemStore } from '@/stores/itemStore';
 import { Plus } from 'lucide-react';
+import { TextInput, TextArea } from '@/components/ui/TextInput';
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -34,7 +35,7 @@ export function Inspector() {
 
   if (!item) {
     return (
-      <div className="w-72 bg-[#F6F6F6] border-l border-gray-200 shrink-0 flex items-center justify-center text-gray-400 text-[13px]">
+      <div className="w-72 bg-[#F6F6F6] border-l border-gray-200 shrink-0 flex items-center justify-center text-[#999999] text-[13px]">
         Select an item to inspect
       </div>
     );
@@ -55,47 +56,46 @@ export function Inspector() {
         <div className="w-full aspect-square rounded-lg overflow-hidden bg-white border border-gray-200 shadow-sm mb-3">
           <img src={src} alt={item.file_name} className="w-full h-full object-contain" />
         </div>
-        <div className="font-medium text-gray-800 text-center break-words w-full">
+        <div className="font-medium text-[#1D1D1F] text-center break-words w-full">
           {item.file_name}
         </div>
-        <div className="text-[11px] text-gray-500 mt-1">{size} &bull; {dim}</div>
+        <div className="text-[11px] text-[#666666] mt-1">{size} &bull; {dim}</div>
       </div>
 
       {/* Properties */}
       <div className="p-4 space-y-5">
         {/* Title */}
         <div>
-          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Title</div>
-          <input
+          <div className="text-[11px] font-semibold text-[#999999] uppercase tracking-wider mb-1.5">Title</div>
+          <TextInput
             type="text"
             defaultValue={item.file_name.replace(/\.[^.]+$/, '')}
-            className="w-full bg-white border border-gray-200 rounded px-2 py-1 text-[13px] focus:outline-none focus:border-blue-500"
           />
         </div>
 
         {/* Notes */}
         <div>
-          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Notes</div>
-          <textarea
+          <div className="text-[11px] font-semibold text-[#999999] uppercase tracking-wider mb-1.5">Notes</div>
+          <TextArea
             defaultValue={item.notes || ''}
             placeholder="Add a note..."
-            className="w-full bg-white border border-gray-200 rounded px-2 py-1 text-[13px] focus:outline-none focus:border-blue-500 min-h-[60px] resize-none"
+            className="min-h-[60px]"
           />
         </div>
 
         {/* Tags */}
         <div>
-          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+          <div className="text-[11px] font-semibold text-[#999999] uppercase tracking-wider mb-1.5 flex items-center justify-between">
             <span>Tags</span>
-            <Plus size={12} className="cursor-pointer hover:text-gray-600" />
+            <Plus size={12} className="cursor-pointer text-[#999999] hover:text-[#666666]" />
           </div>
           <div className="flex flex-wrap gap-1.5">
             {tags.map((tag) => (
-              <span key={tag} className="bg-gray-200/80 text-gray-700 px-2 py-0.5 rounded-md text-[12px]">
+              <span key={tag} className="bg-[#F0F0F0] text-[#333333] px-2 py-0.5 rounded-full text-[11px] font-medium">
                 {tag}
               </span>
             ))}
-            <span className="border border-dashed border-gray-300 text-gray-400 px-2 py-0.5 rounded-md text-[12px] cursor-pointer hover:bg-gray-100">
+            <span className="border border-dashed border-[#E5E5E5] text-[#999999] px-2 py-0.5 rounded-full text-[11px] cursor-pointer hover:bg-[#ECECEC]">
               Add Tag...
             </span>
           </div>
@@ -103,27 +103,27 @@ export function Inspector() {
 
         {/* Information */}
         <div>
-          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Information</div>
+          <div className="text-[11px] font-semibold text-[#999999] uppercase tracking-wider mb-1.5">Information</div>
           <div className="space-y-2 text-[12px]">
             <div className="flex justify-between">
-              <span className="text-gray-500">Format</span>
-              <span className="text-gray-800">{ext} Image</span>
+              <span className="text-[#666666]">Format</span>
+              <span className="text-[#333333]">{ext} Image</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Dimensions</span>
-              <span className="text-gray-800">{dim}</span>
+              <span className="text-[#666666]">Dimensions</span>
+              <span className="text-[#333333]">{dim}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Size</span>
-              <span className="text-gray-800">{size}</span>
+              <span className="text-[#666666]">Size</span>
+              <span className="text-[#333333]">{size}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Date Added</span>
-              <span className="text-gray-800">{formatDate(item.created_at)}</span>
+              <span className="text-[#666666]">Date Added</span>
+              <span className="text-[#333333]">{formatDate(item.created_at)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Modified</span>
-              <span className="text-gray-800">{formatDate(item.modified_at)}</span>
+              <span className="text-[#666666]">Modified</span>
+              <span className="text-[#333333]">{formatDate(item.modified_at)}</span>
             </div>
           </div>
         </div>

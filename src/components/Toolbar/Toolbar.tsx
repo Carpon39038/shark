@@ -12,6 +12,7 @@ import {
   ChevronLeft, ChevronRight, Sidebar as SidebarIcon,
   Image as ImageIcon,
 } from 'lucide-react';
+import { TextInput } from '@/components/ui/TextInput';
 
 export function Toolbar() {
   const { libraries, activeLibraryId } = useLibraryStore();
@@ -61,11 +62,11 @@ export function Toolbar() {
           <div className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]" />
           <div className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]" />
         </div>
-        <div className="flex items-center gap-3 text-gray-500">
-          <SidebarIcon size={18} className="hover:text-gray-800 cursor-pointer" onClick={toggleSidebar} />
+        <div className="flex items-center gap-3 text-[#666666]">
+          <SidebarIcon size={18} className="hover:text-[#1D1D1F] cursor-pointer" onClick={toggleSidebar} />
           <div className="flex items-center gap-1">
-            <ChevronLeft size={20} className="text-gray-400" />
-            <ChevronRight size={20} className="text-gray-400" />
+            <ChevronLeft size={20} className="text-[#999999]" />
+            <ChevronRight size={20} className="text-[#999999]" />
           </div>
         </div>
       </div>
@@ -75,47 +76,47 @@ export function Toolbar() {
         <div className="flex items-center bg-white border border-gray-200 rounded-md shadow-sm overflow-hidden">
           <button
             onClick={() => setViewMode('grid')}
-            className={`px-3 py-1 ${viewMode === 'grid' ? 'bg-gray-100 text-gray-700' : 'text-gray-500 hover:bg-gray-50'}`}
+            className={`px-3 py-1 ${viewMode === 'grid' ? 'bg-gray-100 text-[#333333]' : 'text-[#666666] hover:bg-gray-50'}`}
           >
             <LayoutGrid size={16} />
           </button>
           <button
             onClick={() => setViewMode('list')}
-            className={`px-3 py-1 border-l border-gray-200 ${viewMode === 'list' ? 'bg-gray-100 text-gray-700' : 'text-gray-500 hover:bg-gray-50'}`}
+            className={`px-3 py-1 border-l border-[#E5E5E5] ${viewMode === 'list' ? 'bg-gray-100 text-[#333333]' : 'text-[#666666] hover:bg-gray-50'}`}
           >
             <List size={16} />
           </button>
         </div>
-        <div className="mx-4 text-[13px] font-medium text-gray-700">
+        <div className="mx-4 text-[13px] font-medium text-[#333333]">
           {activeLib ? activeLib.name : 'Shark'}
         </div>
         <div className="flex items-center gap-2 w-32">
-          <ImageIcon size={14} className="text-gray-400" />
+          <ImageIcon size={14} className="text-[#999999]" />
           <input
             type="range"
             min="10"
             max="100"
             value={zoom}
             onChange={(e) => handleZoomChange(Number(e.target.value))}
-            className="w-full accent-blue-500 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            className="w-full accent-[#0063E1] h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
           />
-          <ImageIcon size={18} className="text-gray-400" />
+          <ImageIcon size={18} className="text-[#999999]" />
         </div>
       </div>
 
       {/* Right: Search & Actions */}
       <div className="flex items-center gap-3 w-72 justify-end shrink-0">
         <div className="relative flex-1">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#999999]" />
+          <TextInput
             type="text"
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             placeholder="Search..."
-            className="w-full pl-8 pr-3 py-1 text-[13px] bg-white border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+            className="pl-8 pr-3 py-1"
           />
         </div>
-        <button className="p-1.5 text-gray-500 hover:bg-gray-200 rounded-md">
+        <button className="p-1.5 text-[#666666] hover:bg-[#ECECEC] rounded-md transition-colors duration-150">
           <SlidersHorizontal size={16} />
         </button>
         <ImportButton />

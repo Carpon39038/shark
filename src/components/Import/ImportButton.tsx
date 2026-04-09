@@ -75,7 +75,7 @@ export function ImportButton() {
     <button
       onClick={handleImport}
       disabled={!activeLibraryId}
-      className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
+      className="p-1.5 text-[#0063E1] hover:bg-[#EBF5FF] rounded-md disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-150"
       title="Import"
     >
       <Plus size={18} />
