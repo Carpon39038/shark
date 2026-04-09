@@ -480,16 +480,23 @@ The `searchQuery` and `setSearchQuery` are already destructured from `useFilterS
 const { searchQuery, setSearchQuery, selectedTag } = useFilterStore();
 ```
 
-Update the `loadItems` call in `handleSearch` else branch:
+Update the `loadItems` call in `handleSearch` else branch to merge all existing filters with the tag filter:
 
 ```typescript
 loadItems(
   activeLibraryId,
-  selectedTag ? { tag: selectedTag } : {},
+  {
+    ...(searchQuery && { search_query: searchQuery }),
+    ...(fileTypes.length > 0 && { file_types: fileTypes }),
+    ...(ratingMin != null && { rating_min: ratingMin }),
+    ...(selectedTag && { tag: selectedTag }),
+  },
   { field: 'created_at', direction: 'desc' },
   { page: 0, page_size: 100 },
 );
 ```
+
+Note: Also destructure `fileTypes` and `ratingMin` from `useFilterStore()` to include them in the filter.
 
 **Step 2: Verify frontend compiles**
 
@@ -550,8 +557,12 @@ export function TagPanel() {
   }, [loadTags]);
 
   // Reload tags when items change (after import, update, etc.)
+  // Only trigger on actual items array changes, not selection or other state
   useEffect(() => {
-    const unsub = useItemStore.subscribe(() => loadTags());
+    const unsub = useItemStore.subscribe(
+      (state) => state.items,
+      () => loadTags(),
+    );
     return unsub;
   }, [loadTags]);
 
@@ -563,9 +574,15 @@ export function TagPanel() {
     const newTag = selectedTag === tag ? null : tag;
     setSelectedTag(newTag);
     if (activeLibraryId) {
+      const { searchQuery, fileTypes, ratingMin } = useFilterStore.getState();
       loadItems(
         activeLibraryId,
-        newTag ? { tag: newTag } : {},
+        {
+          ...(searchQuery && { search_query: searchQuery }),
+          ...(fileTypes?.length && { file_types: fileTypes }),
+          ...(ratingMin != null && { rating_min: ratingMin }),
+          ...(newTag && { tag: newTag }),
+        },
         { field: 'created_at', direction: 'desc' },
         { page: 0, page_size: 100 },
       );
@@ -661,7 +678,6 @@ import type { Item, TagCount } from '@/lib/types';
 export function InspectorPanel() {
   const items = useItemStore((s) => s.items);
   const selectedIds = useItemStore((s) => s.selectedIds);
-  const loadItems = useItemStore((s) => s.loadItems);
   const activeLibraryId = useLibraryStore((s) => s.activeLibraryId);
 
   const selectedItem = items.find((i) => selectedIds.has(i.id) && selectedIds.size === 1) ?? null;
@@ -674,17 +690,15 @@ export function InspectorPanel() {
     );
   }
 
-  return <ItemInspector item={selectedItem} activeLibraryId={activeLibraryId} loadItems={loadItems} />;
+  return <ItemInspector item={selectedItem} activeLibraryId={activeLibraryId} />;
 }
 
 function ItemInspector({
   item,
   activeLibraryId,
-  loadItems,
 }: {
   item: Item;
   activeLibraryId: string | null;
-  loadItems: (libId: string, filter: any, sort: any, page: any) => Promise<void>;
 }) {
   const [tags, setTags] = useState(item.tags);
   const [rating, setRating] = useState(item.rating);
@@ -719,19 +733,21 @@ function ItemInspector({
     async (field: { tags?: string; rating?: number; notes?: string }) => {
       if (!activeLibraryId) return;
       try {
-        await invoke('update_item', {
+        const updated = await invoke<Item>('update_item', {
           itemId: item.id,
           tags: field.tags,
           rating: field.rating,
           notes: field.notes,
         });
-        // Reload to sync grid
-        loadItems(activeLibraryId, {}, { field: 'created_at', direction: 'desc' }, { page: 0, page_size: 100 });
+        // Update item in local store instead of full reload
+        useItemStore.setState((state) => ({
+          items: state.items.map((i) => (i.id === item.id ? updated : i)),
+        }));
       } catch (e) {
         console.error('Failed to update item:', e);
       }
     },
-    [item.id, activeLibraryId, loadItems],
+    [item.id, activeLibraryId],
   );
 
   const addTag = (tag: string) => {
@@ -992,8 +1008,6 @@ interface ContextMenuProps {
 }
 
 export function ContextMenu({ x, y, item, onClose }: ContextMenuProps) {
-  const loadItems = useItemStore((s) => s.loadItems);
-  const openViewer = useItemStore((s) => s.openViewer); // will use uiStore instead
   const activeLibraryId = useLibraryStore((s) => s.activeLibraryId);
   const [addingTag, setAddingTag] = useState(false);
   const [tagInput, setTagInput] = useState('');
@@ -1024,14 +1038,17 @@ export function ContextMenu({ x, y, item, onClose }: ContextMenuProps) {
     async (newTags: string) => {
       if (!activeLibraryId) return;
       try {
-        await invoke('update_item', { itemId: item.id, tags: newTags });
-        loadItems(activeLibraryId, {}, { field: 'created_at', direction: 'desc' }, { page: 0, page_size: 100 });
+        const updated = await invoke<Item>('update_item', { itemId: item.id, tags: newTags });
+        // Update item in local store instead of full reload
+        useItemStore.setState((state) => ({
+          items: state.items.map((i) => (i.id === item.id ? updated : i)),
+        }));
       } catch (e) {
         console.error('Failed to update tags:', e);
       }
       onClose();
     },
-    [item.id, activeLibraryId, loadItems, onClose],
+    [item.id, activeLibraryId, onClose],
   );
 
   const addTag = (tag: string) => {

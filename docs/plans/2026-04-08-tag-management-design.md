@@ -27,6 +27,8 @@ pub fn update_item(
 
 DB function builds dynamic SET clause from provided fields. FTS trigger auto-syncs tags column.
 
+Note on rating semantics: `None` means "don't modify this field", `Some(0)` means "clear the rating". The UI uses click-same-star to clear (sends `Some(0)`). This distinction is sufficient for V1.
+
 ### 2. `get_tag_counts` command
 
 **File:** `src-tauri/src/commands.rs`, `src-tauri/src/db.rs`
@@ -41,6 +43,8 @@ pub fn get_tag_counts(
 ) -> Result<Vec<TagCount>, AppError>
 ```
 
+Note: `library_id` is currently unused because each library uses a separate DB file. It's kept for API consistency and will be needed if migrating to a single-DB multi-library model.
+
 ```rust
 pub struct TagCount {
     pub tag: String,
@@ -54,7 +58,7 @@ SQL: parse comma-separated `tags` column, group by individual tag, count active 
 
 **File:** `src-tauri/src/db.rs`, `src-tauri/src/models.rs`
 
-Add `tag` field to `ItemFilter`. Backend adds `WHERE tags LIKE '%tag%'` using parameterized query.
+Add `tag` field to `ItemFilter`. Backend adds `WHERE (',' || tags || ',') LIKE '%,tag,%'` using parameterized query. This uses precise comma-delimited matching to avoid partial matches (e.g., "art" won't match "artwork").
 
 ```rust
 pub struct ItemFilter {
@@ -148,7 +152,7 @@ Add inspector toggle button (info icon) in toolbar.
 Tag click in sidebar
   → filterStore.setSelectedTag("landscape")
   → triggers loadItems with filter { tag: "landscape" }
-  → backend: WHERE tags LIKE '%landscape%'
+  → backend: WHERE (',' || tags || ',') LIKE '%,landscape,%'
   → grid shows filtered items
 
 Tag add in inspector
@@ -176,3 +180,5 @@ Right-click → Add Tag
 - Tag color/grouping
 - Tag rename/delete across all items
 - Drag tags onto items
+
+**Technical debt note:** Tags are stored as comma-separated strings. Future batch operations (rename/delete tag across all items) will require `UPDATE` on every matching row, which may be slow for large libraries. Consider migrating to a normalized `item_tags` join table before implementing batch operations.
