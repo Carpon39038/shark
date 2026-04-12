@@ -8,6 +8,7 @@ interface FilterState {
   fileTypes: string[];
   ratingMin: number | null;
   smartFolderId: string | null;
+  selectedTag: string | null;
 }
 
 interface FilterActions {
@@ -17,6 +18,7 @@ interface FilterActions {
   setFileTypes: (types: string[]) => void;
   setRatingMin: (rating: number | null) => void;
   setSmartFolderId: (id: string | null) => void;
+  setSelectedTag: (tag: string | null) => void;
   resetFilters: () => void;
 }
 
@@ -27,6 +29,7 @@ const initialState: FilterState = {
   fileTypes: [],
   ratingMin: null,
   smartFolderId: null,
+  selectedTag: null,
 };
 
 export const useFilterStore = create<FilterState & FilterActions>()(
@@ -45,6 +48,8 @@ export const useFilterStore = create<FilterState & FilterActions>()(
       setRatingMin: (rating) => set({ ratingMin: rating }),
 
       setSmartFolderId: (id) => set({ smartFolderId: id }),
+
+      setSelectedTag: (tag) => set({ selectedTag: tag }),
 
       resetFilters: () => set(initialState),
     }),

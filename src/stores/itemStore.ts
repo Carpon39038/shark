@@ -31,6 +31,7 @@ interface ItemActions {
     page: Pagination,
   ) => Promise<void>;
   loadThumbnails: (itemIds: string[]) => Promise<void>;
+  updateItem: (id: string, updates: { tags?: string; rating?: number; notes?: string }) => Promise<Item | null>;
 }
 
 export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
@@ -151,6 +152,25 @@ export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
       set((state) => ({ thumbnailPaths: { ...state.thumbnailPaths, ...map } }));
     } catch (e) {
       console.error('Failed to load thumbnails:', e);
+    }
+  },
+
+  updateItem: async (id, updates) => {
+    try {
+      const updated = await invoke<Item>('update_item', {
+        itemId: id,
+        tags: updates.tags,
+        rating: updates.rating,
+        notes: updates.notes,
+      });
+      set((state) => ({
+        items: state.items.map((i) => (i.id === id ? updated : i)),
+      }));
+      return updated;
+    } catch (e) {
+      console.error('Failed to update item:', e);
+      useUiStore.getState().setError(String(e));
+      return null;
     }
   },
 }));

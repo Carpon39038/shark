@@ -45,6 +45,8 @@ pub fn run() {
             commands::search_items_cmd,
             commands::get_folders,
             commands::get_all_tags,
+            commands::update_item,
+            commands::get_tag_counts,
             commands::list_smart_folders,
             commands::get_smart_folder,
             commands::create_smart_folder,

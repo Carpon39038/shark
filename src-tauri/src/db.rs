@@ -2,7 +2,7 @@ use rusqlite::{params, Connection, Row};
 use std::path::Path;
 
 use crate::error::AppError;
-use crate::models::{Folder, Item, ItemFilter, ItemPage, ItemStatus, Library, Pagination, RuleGroup, SmartFolder, SortDirection, SortSpec};
+use crate::models::{Folder, Item, ItemFilter, ItemPage, ItemStatus, Library, Pagination, RuleGroup, SmartFolder, SortDirection, SortSpec, TagCount};
 
 pub fn row_to_item(row: &Row) -> Result<Item, rusqlite::Error> {
     let status_str: String = row.get(11)?;
@@ -64,6 +64,13 @@ fn build_filter_params(filter: &ItemFilter) -> FilterParams {
     if let Some(rating_min) = filter.rating_min {
         where_clauses.push(format!("rating >= ?{}", param_values.len() + 1));
         param_values.push(Box::new(rating_min));
+    }
+
+    if let Some(ref tag) = filter.tag {
+        if !tag.is_empty() {
+            where_clauses.push(format!("(',' || tags || ',') LIKE ?{}", param_values.len() + 1));
+            param_values.push(Box::new(format!("%,{tag},%")));
+        }
     }
 
     where_clauses.push("status = 'active'".to_string());
@@ -323,6 +330,51 @@ pub fn get_item(conn: &Connection, id: &str) -> Result<Item, AppError> {
     .map_err(|e| AppError::NotFound(format!("Item {id}: {e}")))
 }
 
+pub fn update_item(
+    conn: &Connection,
+    id: &str,
+    tags: Option<&str>,
+    rating: Option<i64>,
+    notes: Option<&str>,
+) -> Result<Item, AppError> {
+    // Verify exists
+    get_item(conn, id)?;
+
+    let mut set_clauses = Vec::new();
+    let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+    if let Some(t) = tags {
+        set_clauses.push(format!("tags = ?{}", param_values.len() + 1));
+        param_values.push(Box::new(t.to_string()));
+    }
+    if let Some(r) = rating {
+        set_clauses.push(format!("rating = ?{}", param_values.len() + 1));
+        param_values.push(Box::new(r));
+    }
+    if let Some(n) = notes {
+        set_clauses.push(format!("notes = ?{}", param_values.len() + 1));
+        param_values.push(Box::new(n.to_string()));
+    }
+
+    if set_clauses.is_empty() {
+        return get_item(conn, id);
+    }
+
+    set_clauses.push("modified_at = datetime('now')".to_string());
+
+    let sql = format!(
+        "UPDATE items SET {} WHERE id = ?{}",
+        set_clauses.join(", "),
+        param_values.len() + 1
+    );
+    param_values.push(Box::new(id.to_string()));
+
+    let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+    conn.execute(&sql, params_refs.as_slice())?;
+
+    get_item(conn, id)
+}
+
 pub fn query_items(
     conn: &Connection,
     filter: &ItemFilter,
@@ -433,6 +485,32 @@ pub fn get_all_tags(conn: &Connection) -> Result<Vec<String>, AppError> {
     let mut tags: Vec<String> = tag_set.into_iter().collect();
     tags.sort();
     Ok(tags)
+}
+
+pub fn get_tag_counts(conn: &Connection) -> Result<Vec<TagCount>, AppError> {
+    let mut stmt = conn.prepare("SELECT DISTINCT tags FROM items WHERE tags != '' AND status = 'active'")?;
+    let rows = stmt.query_map([], |row| {
+        let tags: String = row.get(0)?;
+        Ok(tags)
+    })?;
+
+    let mut tag_counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    for row in rows {
+        let tags_str = row?;
+        for tag in tags_str.split(',') {
+            let trimmed = tag.trim();
+            if !trimmed.is_empty() {
+                *tag_counts.entry(trimmed.to_string()).or_insert(0) += 1;
+            }
+        }
+    }
+
+    let mut result: Vec<TagCount> = tag_counts
+        .into_iter()
+        .map(|(tag, count)| TagCount { tag, count })
+        .collect();
+    result.sort_by(|a, b| b.count.cmp(&a.count).then(a.tag.cmp(&b.tag)));
+    Ok(result)
 }
 
 // --- Smart Folders ---
@@ -827,5 +905,67 @@ mod tests {
             [],
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_update_item() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        let mut item = make_test_item("id-1", "1");
+        item.tags = "landscape".to_string();
+        insert_item(&conn, &item).unwrap();
+
+        // Update tags only
+        let updated = update_item(&conn, "id-1", Some("landscape,nature"), None, None).unwrap();
+        assert_eq!(updated.tags, "landscape,nature");
+        assert_eq!(updated.rating, 0); // unchanged
+
+        // Update rating only
+        let updated = update_item(&conn, "id-1", None, Some(5), None).unwrap();
+        assert_eq!(updated.tags, "landscape,nature"); // unchanged
+        assert_eq!(updated.rating, 5);
+
+        // Update notes only
+        let updated = update_item(&conn, "id-1", None, None, Some("great photo")).unwrap();
+        assert_eq!(updated.notes, "great photo");
+
+        // Verify persisted
+        let fetched = get_item(&conn, "id-1").unwrap();
+        assert_eq!(fetched.tags, "landscape,nature");
+        assert_eq!(fetched.rating, 5);
+        assert_eq!(fetched.notes, "great photo");
+    }
+
+    #[test]
+    fn test_get_tag_counts() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        let mut item1 = make_test_item("id-1", "1");
+        item1.tags = "landscape,nature".to_string();
+        insert_item(&conn, &item1).unwrap();
+
+        let mut item2 = make_test_item("id-2", "2");
+        item2.tags = "portrait,nature".to_string();
+        insert_item(&conn, &item2).unwrap();
+
+        let mut item3 = make_test_item("id-3", "3");
+        item3.tags = "landscape".to_string();
+        insert_item(&conn, &item3).unwrap();
+
+        let counts = get_tag_counts(&conn).unwrap();
+        assert_eq!(counts.len(), 3);
+
+        let landscape = counts.iter().find(|tc| tc.tag == "landscape").unwrap();
+        assert_eq!(landscape.count, 2);
+
+        let nature = counts.iter().find(|tc| tc.tag == "nature").unwrap();
+        assert_eq!(nature.count, 2);
+
+        let portrait = counts.iter().find(|tc| tc.tag == "portrait").unwrap();
+        assert_eq!(portrait.count, 1);
     }
 }

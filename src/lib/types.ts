@@ -34,6 +34,7 @@ export interface ItemFilter {
   file_types?: string[] | null;
   rating_min?: number | null;
   search_query?: string | null;
+  tag?: string | null;
 }
 
 export interface SortSpec {
@@ -86,6 +87,11 @@ export interface ImportPrepResult {
 export type DedupAction = 'skip' | 'keepBoth';
 
 export type ThumbnailSize = 'S256' | 'S1024';
+
+export interface TagCount {
+  tag: string;
+  count: number;
+}
 
 export interface SearchResult {
   item: Item;

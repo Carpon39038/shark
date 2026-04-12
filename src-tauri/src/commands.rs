@@ -490,6 +490,34 @@ pub fn get_all_tags(
 }
 
 #[tauri::command]
+pub fn update_item(
+    item_id: String,
+    tags: Option<String>,
+    rating: Option<i64>,
+    notes: Option<String>,
+    state: State<'_, DbState>,
+) -> Result<Item, AppError> {
+    with_library_conn(&state, |conn| {
+        db::update_item(
+            conn,
+            &item_id,
+            tags.as_deref(),
+            rating,
+            notes.as_deref(),
+        )
+    })
+}
+
+#[tauri::command]
+pub fn get_tag_counts(
+    library_id: String,
+    state: State<'_, DbState>,
+) -> Result<Vec<TagCount>, AppError> {
+    let _ = library_id;
+    with_library_conn(&state, |conn| db::get_tag_counts(conn))
+}
+
+#[tauri::command]
 pub fn list_smart_folders(state: State<'_, DbState>) -> Result<Vec<SmartFolder>, AppError> {
     with_library_conn(&state, |conn| db::list_smart_folders(conn))
 }

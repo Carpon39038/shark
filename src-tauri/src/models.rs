@@ -66,6 +66,7 @@ pub struct ItemFilter {
     pub file_types: Option<Vec<String>>,
     pub rating_min: Option<i64>,
     pub search_query: Option<String>,
+    pub tag: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,4 +186,10 @@ pub struct Condition {
     pub field: String,
     pub op: String,
     pub value: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TagCount {
+    pub tag: String,
+    pub count: i64,
 }

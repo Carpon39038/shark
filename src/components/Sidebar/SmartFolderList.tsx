@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { useSmartFolderStore } from '@/stores/smartFolderStore';
 import { useItemStore } from '@/stores/itemStore';
 import { useFilterStore } from '@/stores/filterStore';
-import { Plus, Clock } from 'lucide-react';
-import type { SmartFolder } from '@/lib/types';
+import { Plus, Clock, BookmarkPlus } from 'lucide-react';
+import type { SmartFolder, Condition, RuleGroup } from '@/lib/types';
 
 interface SmartFolderListProps {
   onEdit: (folder: SmartFolder) => void;
@@ -13,7 +13,7 @@ interface SmartFolderListProps {
 
 export function SmartFolderList({ onEdit, onCreate }: SmartFolderListProps) {
   const activeLibraryId = useLibraryStore((s) => s.activeLibraryId);
-  const { folders, selectedId, fetchFolders, setSelectedId, remove } =
+  const { folders, selectedId, fetchFolders, setSelectedId, remove, create } =
     useSmartFolderStore();
   const loadSmartFolderItems = useItemStore((s) => s.loadSmartFolderItems);
   const setSmartFolderId = useFilterStore((s) => s.setSmartFolderId);
@@ -75,6 +75,32 @@ export function SmartFolderList({ onEdit, onCreate }: SmartFolderListProps) {
     setContextMenu(null);
   };
 
+  const handleSaveFromFilters = useCallback(() => {
+    const { searchQuery, fileTypes, ratingMin } = useFilterStore.getState();
+    const conditions: Condition[] = [];
+
+    if (searchQuery.trim()) {
+      conditions.push({ field: 'file_name', op: 'contains', value: searchQuery.trim() });
+    }
+    if (fileTypes.length > 0) {
+      conditions.push({ field: 'file_type', op: 'in', value: fileTypes });
+    }
+    if (ratingMin !== null) {
+      conditions.push({ field: 'rating', op: 'gte', value: ratingMin });
+    }
+
+    if (conditions.length === 0) {
+      window.alert('No active filters to save. Set some filters first.');
+      return;
+    }
+
+    const name = window.prompt('Name for new smart folder:');
+    if (!name?.trim()) return;
+
+    const rules: RuleGroup = { operator: 'AND', conditions };
+    create(name.trim(), rules);
+  }, [create]);
+
   // Build tree from flat list
   const topLevel = folders.filter((f) => !f.parent_id);
   const getChildren = (parentId: string): SmartFolder[] =>
@@ -108,7 +134,16 @@ export function SmartFolderList({ onEdit, onCreate }: SmartFolderListProps) {
     <div className="mb-6">
       <div className="mb-2 flex items-center justify-between px-1">
         <span className="text-[11px] font-semibold text-[#999999] uppercase tracking-wider">Smart Folders</span>
-        <Plus size={14} className="text-[#999999] hover:text-[#666666] cursor-pointer" onClick={onCreate} />
+        <div className="flex items-center gap-1.5">
+          <span title="Save current filters as smart folder">
+            <BookmarkPlus
+              size={14}
+              className="text-[#999999] hover:text-[#0063E1] cursor-pointer transition-colors duration-150"
+              onClick={handleSaveFromFilters}
+            />
+          </span>
+          <Plus size={14} className="text-[#999999] hover:text-[#666666] cursor-pointer" onClick={onCreate} />
+        </div>
       </div>
       {topLevel.length === 0 ? (
         <p className="text-[12px] text-[#999999] px-3">None yet</p>
