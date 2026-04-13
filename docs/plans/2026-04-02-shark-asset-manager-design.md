@@ -272,7 +272,7 @@ All commands return `Result<T, AppError>` where `AppError` is a serializable err
 | Size | Generated on | Used by | Format |
 |------|-------------|---------|--------|
 | 256px | Import time | Grid view (default) | JPEG, quality 85 |
-| 1024px | On-demand, background | Grid view (zoomed in), Viewer preview | JPEG, quality 90 |
+| 1024px | On-demand, background | Grid view (zoomed in), Viewer preview | JPEG, quality 90 | **(Deferred post-1.0)**
 
 ### Loading flow
 
@@ -448,7 +448,7 @@ For production, scope should be restricted to library paths only. The frontend u
 - Smart folders
 - Import modes (move/reference)
 - Dedup dialog
-- 1024px thumbnails + on-demand generation
+- ~~1024px thumbnails + on-demand generation~~ **(Deferred: 不做 1.0，Viewer 直接用原图)**
 - Error handling (missing files, corruption)
 - Performance optimization (100k benchmark)
 - Packaging (installer per platform)
