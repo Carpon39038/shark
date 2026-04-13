@@ -582,3 +582,11 @@ pub fn query_smart_folder_items(
         db::query_smart_folder_items(conn, &sf.rules, &sort, &page)
     })
 }
+
+#[tauri::command]
+pub fn preview_smart_folder(
+    rules: String,
+    state: State<'_, DbState>,
+) -> Result<u64, AppError> {
+    with_library_conn(&state, |conn| db::count_matching_items(conn, &rules))
+}

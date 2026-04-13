@@ -668,6 +668,20 @@ pub fn query_smart_folder_items(
     })
 }
 
+pub fn count_matching_items(conn: &Connection, rules_json: &str) -> Result<u64, AppError> {
+    let rule_group: RuleGroup =
+        serde_json::from_str(rules_json).map_err(|e| AppError::Database(format!("Invalid rules JSON: {e}")))?;
+    let (where_fragment, params) = crate::smart_folder::rules_to_sql(&rule_group)?;
+
+    let sql = format!(
+        "SELECT COUNT(*) FROM items WHERE ({}) AND status = 'active'",
+        where_fragment
+    );
+    let refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    let count: i64 = conn.query_row(&sql, refs.as_slice(), |row| row.get(0))?;
+    Ok(count as u64)
+}
+
 pub fn batch_sha256_exists(
     conn: &Connection,
     hashes: &[&str],

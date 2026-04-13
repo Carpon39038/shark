@@ -53,6 +53,7 @@ pub fn run() {
             commands::update_smart_folder,
             commands::delete_smart_folder,
             commands::query_smart_folder_items,
+            commands::preview_smart_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Shark");
