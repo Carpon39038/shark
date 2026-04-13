@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   type SmartFolder,
   type RuleGroup,
@@ -10,6 +10,7 @@ import {
   FILE_TYPE_OPERATORS,
 } from '@/lib/types';
 import { useSmartFolderStore } from '@/stores/smartFolderStore';
+import { invoke } from '@tauri-apps/api/core';
 import { TextInput } from '@/components/ui/TextInput';
 import { Select } from '@/components/ui/Select';
 
@@ -50,6 +51,24 @@ export function SmartFolderEditor({ folder, onClose }: SmartFolderEditorProps) {
     folder ? (JSON.parse(folder.rules).conditions ?? [getDefaultCondition()]) : [getDefaultCondition()],
   );
   const [saving, setSaving] = useState(false);
+  const [matchCount, setMatchCount] = useState<number | null>(null);
+  const [calculating, setCalculating] = useState(false);
+
+  useEffect(() => {
+    setCalculating(true);
+    const timer = setTimeout(async () => {
+      try {
+        const rulesJson = JSON.stringify({ operator, conditions });
+        const count = await invoke<number>('preview_smart_folder', { rules: rulesJson });
+        setMatchCount(count);
+      } catch {
+        setMatchCount(null);
+      } finally {
+        setCalculating(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [operator, conditions]);
 
   const addCondition = () => {
     setConditions([...conditions, getDefaultCondition()]);
@@ -144,6 +163,13 @@ export function SmartFolderEditor({ folder, onClose }: SmartFolderEditorProps) {
           >
             + Add Condition
           </button>
+
+          {/* Match count preview */}
+          {(calculating || matchCount !== null) && (
+            <div className="text-[13px] text-[#0063E1] mb-4">
+              {calculating ? '正在计算...' : `匹配 ${matchCount} 个项目`}
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex justify-end gap-2">
