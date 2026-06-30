@@ -29,5 +29,8 @@ src-tauri/target/
 # Worktrees
 .worktrees/
 
+# Scratch / temp
+tmp/
+
 # Claude Code project instructions (do not commit)
 CLAUDE.md

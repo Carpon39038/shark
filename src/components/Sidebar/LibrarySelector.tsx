@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { useItemStore } from '@/stores/itemStore';
+import { useFilterStore } from '@/stores/filterStore';
 import { useUiStore } from '@/stores/uiStore';
 import { CreateLibraryModal } from './CreateLibraryModal';
 import type { Library } from '@/lib/types';
@@ -9,7 +10,8 @@ import { Select } from '@/components/ui/Select';
 
 export function LibrarySelector() {
   const { libraries, activeLibraryId, setLibraries, setActiveLibrary, addLibrary } = useLibraryStore();
-  const loadItems = useItemStore((s) => s.loadItems);
+  const reloadCurrentView = useItemStore((s) => s.reloadCurrentView);
+  const selectSpecialView = useFilterStore((s) => s.selectSpecialView);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const handleSelect = async (id: string) => {
@@ -20,7 +22,9 @@ export function LibrarySelector() {
       useUiStore.getState().setError(String(e));
       return;
     }
-    loadItems(id, {}, { field: 'created_at', direction: 'desc' }, { page: 0, page_size: 100 });
+    // A freshly opened library starts on the All view, not a stale selection.
+    selectSpecialView('all');
+    reloadCurrentView(id);
   };
 
   useEffect(() => {

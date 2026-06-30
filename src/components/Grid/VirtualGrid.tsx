@@ -1,4 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
+import { ask } from '@tauri-apps/plugin-dialog';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useItemStore } from '@/stores/itemStore';
 import { useViewStore } from '@/stores/viewStore';
@@ -6,13 +7,17 @@ import { useUiStore } from '@/stores/uiStore';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { useFolderStore } from '@/stores/folderStore';
 import { AssetCard } from './AssetCard';
-import { ChevronDown, FolderPlus, Plus } from 'lucide-react';
+import { useFilterStore } from '@/stores/filterStore';
+import { ChevronDown, FolderPlus, Plus, Trash2, RotateCcw } from 'lucide-react';
 
 export function VirtualGrid() {
   const { items, selectedIds, thumbnailPaths, toggleSelect, selectRange, clearSelection } = useItemStore();
+  const deleteItems = useItemStore((s) => s.deleteItems);
+  const restoreItems = useItemStore((s) => s.restoreItems);
   const gridSize = useViewStore((s) => s.gridSize);
   const openViewer = useUiStore((s) => s.openViewer);
   const activeLibraryId = useLibraryStore((s) => s.activeLibraryId);
+  const activeView = useFilterStore((s) => s.activeView);
   const { folders, addItems, create: createFolder } = useFolderStore();
   const [columnCount, setColumnCount] = useState(4);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; itemId: string } | null>(null);
@@ -124,6 +129,39 @@ export function VirtualGrid() {
     }
     setContextMenu(null);
     setFolderSubmenuOpen(false);
+  };
+
+  // Items targeted by the current context-menu action.
+  const contextTargetIds = (): string[] =>
+    contextMenu ? (selectedIds.size > 0 ? Array.from(selectedIds) : [contextMenu.itemId]) : [];
+
+  const handleMoveToTrash = async () => {
+    const ids = contextTargetIds();
+    setContextMenu(null);
+    if (activeLibraryId && ids.length > 0) {
+      await deleteItems(activeLibraryId, ids, false);
+    }
+  };
+
+  const handleRestore = async () => {
+    const ids = contextTargetIds();
+    setContextMenu(null);
+    if (activeLibraryId && ids.length > 0) {
+      await restoreItems(activeLibraryId, ids);
+    }
+  };
+
+  const handleDeletePermanently = async () => {
+    const ids = contextTargetIds();
+    setContextMenu(null);
+    if (!activeLibraryId || ids.length === 0) return;
+    const ok = await ask(
+      `Permanently delete ${ids.length} item${ids.length > 1 ? 's' : ''}? This cannot be undone.`,
+      { title: 'Delete Permanently', kind: 'warning' },
+    );
+    if (ok) {
+      await deleteItems(activeLibraryId, ids, true);
+    }
   };
 
   if (!activeLibraryId) {
@@ -268,6 +306,35 @@ export function VirtualGrid() {
               </div>
             )}
           </div>
+
+          <div className="border-t border-[#E5E5E5] my-1" />
+
+          {activeView === 'trash' ? (
+            <>
+              <button
+                onClick={handleRestore}
+                className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-[13px] text-[#333333] hover:bg-[#F0F0F0]"
+              >
+                <RotateCcw size={14} />
+                Restore
+              </button>
+              <button
+                onClick={handleDeletePermanently}
+                className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-[13px] text-[#FF3B30] hover:bg-[#F0F0F0]"
+              >
+                <Trash2 size={14} />
+                Delete Permanently
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleMoveToTrash}
+              className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-[13px] text-[#FF3B30] hover:bg-[#F0F0F0]"
+            >
+              <Trash2 size={14} />
+              Move to Trash
+            </button>
+          )}
         </div>
       )}
     </div>

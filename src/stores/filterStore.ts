@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import type { ItemFilter, SpecialView } from '@/lib/types';
 
 interface FilterState {
   sortBy: string;
@@ -9,6 +10,10 @@ interface FilterState {
   ratingMin: number | null;
   smartFolderId: string | null;
   selectedTag: string | null;
+  /** Which view drives the main grid. 'folder' uses selectedFolderId. */
+  activeView: SpecialView;
+  /** Folder id when activeView === 'folder'; null means no folder chosen. */
+  selectedFolderId: string | null;
 }
 
 interface FilterActions {
@@ -19,7 +24,13 @@ interface FilterActions {
   setRatingMin: (rating: number | null) => void;
   setSmartFolderId: (id: string | null) => void;
   setSelectedTag: (tag: string | null) => void;
+  /** Select a regular folder (sets activeView to 'folder'). */
+  selectFolder: (folderId: string | null) => void;
+  /** Select one of the special views (All / Uncategorized / Untagged / Trash). */
+  selectSpecialView: (view: SpecialView) => void;
   resetFilters: () => void;
+  /** Build the ItemFilter for the current activeView. */
+  buildItemFilter: () => ItemFilter;
 }
 
 const initialState: FilterState = {
@@ -30,11 +41,13 @@ const initialState: FilterState = {
   ratingMin: null,
   smartFolderId: null,
   selectedTag: null,
+  activeView: 'all',
+  selectedFolderId: null,
 };
 
 export const useFilterStore = create<FilterState & FilterActions>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...initialState,
 
       setSortBy: (field) => set({ sortBy: field }),
@@ -51,7 +64,30 @@ export const useFilterStore = create<FilterState & FilterActions>()(
 
       setSelectedTag: (tag) => set({ selectedTag: tag }),
 
+      selectFolder: (folderId) =>
+        set({ activeView: 'folder', selectedFolderId: folderId, smartFolderId: null, selectedTag: null }),
+
+      selectSpecialView: (view) =>
+        set({ activeView: view, selectedFolderId: null, smartFolderId: null, selectedTag: null }),
+
       resetFilters: () => set(initialState),
+
+      buildItemFilter: () => {
+        const { activeView, selectedFolderId } = get();
+        switch (activeView) {
+          case 'folder':
+            return { folder_id: selectedFolderId };
+          case 'uncategorized':
+            return { no_folder: true };
+          case 'untagged':
+            return { no_tag: true };
+          case 'trash':
+            return { status: 'deleted' };
+          case 'all':
+          default:
+            return {};
+        }
+      },
     }),
     {
       name: 'shark-filter-store',

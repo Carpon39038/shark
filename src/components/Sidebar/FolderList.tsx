@@ -5,7 +5,7 @@ import { useItemStore } from '@/stores/itemStore';
 import { useFilterStore } from '@/stores/filterStore';
 import { useSmartFolderStore } from '@/stores/smartFolderStore';
 import { useFolderStore } from '@/stores/folderStore';
-import { Folder as FolderIcon, Image as ImageIcon, Tag, Star, Trash2, Plus } from 'lucide-react';
+import { Folder as FolderIcon, Image as ImageIcon, Tag, Trash2, Plus } from 'lucide-react';
 import type { Folder as FolderType } from '@/lib/types';
 
 type DropPosition = 'before' | 'inside' | 'after';
@@ -18,11 +18,14 @@ interface DragState {
 
 export function FolderList() {
   const activeLibraryId = useLibraryStore((s) => s.activeLibraryId);
-  const loadItems = useItemStore((s) => s.loadItems);
-  const setSmartFolderId = useFilterStore((s) => s.setSmartFolderId);
+  const reloadCurrentView = useItemStore((s) => s.reloadCurrentView);
+  const selectFolder = useFilterStore((s) => s.selectFolder);
+  const selectSpecialView = useFilterStore((s) => s.selectSpecialView);
+  const activeView = useFilterStore((s) => s.activeView);
+  const selectedFolderId = useFilterStore((s) => s.selectedFolderId);
   const setSelectedSmartFolder = useSmartFolderStore((s) => s.setSelectedId);
   const { folders, fetchFolders, create, rename: renameFolder, remove: removeFolder, move, getItemCount } = useFolderStore();
-  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const selectedFolder = activeView === 'folder' ? selectedFolderId : null;
   const [contextMenu, setContextMenu] = useState<{ folder: FolderType; x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -32,14 +35,6 @@ export function FolderList() {
   const [newFolderName, setNewFolderName] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
   const newFolderInputRef = useRef<HTMLInputElement>(null);
-
-  const smartFolderId = useFilterStore((s) => s.smartFolderId);
-
-  useEffect(() => {
-    if (smartFolderId) {
-      setSelectedFolder(null);
-    }
-  }, [smartFolderId]);
 
   useEffect(() => {
     if (!activeLibraryId) return;
@@ -57,16 +52,18 @@ export function FolderList() {
   }, []);
 
   const handleSelectFolder = (folderId: string | null) => {
-    setSelectedFolder(folderId);
-    setSmartFolderId(null);
+    selectFolder(folderId);
     setSelectedSmartFolder(null);
     if (activeLibraryId) {
-      loadItems(
-        activeLibraryId,
-        { folder_id: folderId },
-        { field: 'created_at', direction: 'desc' },
-        { page: 0, page_size: 100 },
-      );
+      reloadCurrentView(activeLibraryId);
+    }
+  };
+
+  const handleSelectSpecialView = (view: Parameters<typeof selectSpecialView>[0]) => {
+    selectSpecialView(view);
+    setSelectedSmartFolder(null);
+    if (activeLibraryId) {
+      reloadCurrentView(activeLibraryId);
     }
   };
 
@@ -288,17 +285,17 @@ export function FolderList() {
     );
   };
 
-  // Nav items (All Items, Uncategorized, etc.)
-  const NavItem = ({ id, icon: Icon, label, color = 'text-[#666666]' }: {
-    id: string | null;
+  // Nav items (All Items, Uncategorized, etc.) — each maps to a special view.
+  const NavItem = ({ view, icon: Icon, label, color = 'text-[#666666]' }: {
+    view: Parameters<typeof selectSpecialView>[0];
     icon: React.ComponentType<{ size?: number; className?: string }>;
     label: string;
     color?: string;
   }) => {
-    const isActive = selectedFolder === id;
+    const isActive = activeView === view;
     return (
       <div
-        onClick={() => handleSelectFolder(id)}
+        onClick={() => handleSelectSpecialView(view)}
         className={`flex items-center justify-between px-3 py-1.5 rounded-md cursor-pointer text-[13px] mb-0.5 ${
           isActive ? 'bg-[#0063E1] text-white' : 'hover:bg-[#ECECEC] text-[#333333]'
         }`}
@@ -314,11 +311,10 @@ export function FolderList() {
   return (
     <div className="flex-1 mb-6">
       <div className="mb-3">
-        <NavItem id={null} icon={ImageIcon} label="All Items" color="text-[#0063E1]" />
-        <NavItem id="__uncategorized" icon={FolderIcon} label="Uncategorized" color="text-[#999999]" />
-        <NavItem id="__untagged" icon={Tag} label="Untagged" color="text-[#999999]" />
-        <NavItem id="__random" icon={Star} label="Random" color="text-[#FF9500]" />
-        <NavItem id="__trash" icon={Trash2} label="Trash" color="text-[#999999]" />
+        <NavItem view="all" icon={ImageIcon} label="All Items" color="text-[#0063E1]" />
+        <NavItem view="uncategorized" icon={FolderIcon} label="Uncategorized" color="text-[#999999]" />
+        <NavItem view="untagged" icon={Tag} label="Untagged" color="text-[#999999]" />
+        <NavItem view="trash" icon={Trash2} label="Trash" color="text-[#999999]" />
       </div>
 
       <div className="mb-2 flex items-center justify-between px-1">

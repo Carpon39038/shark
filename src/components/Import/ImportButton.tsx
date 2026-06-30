@@ -19,7 +19,7 @@ export function ImportButton() {
   const { libraries, activeLibraryId } = useLibraryStore();
   const { setImporting, setImportProgress, showDedupDialog } = useUiStore();
   const addItem = useItemStore((s) => s.addItem);
-  const loadItems = useItemStore((s) => s.loadItems);
+  const reloadCurrentView = useItemStore((s) => s.reloadCurrentView);
 
   const handleImport = async () => {
     const lib = libraries.find((l) => l.id === activeLibraryId);
@@ -58,7 +58,7 @@ export function ImportButton() {
           sourcePath: selected,
         });
         if (activeLibraryId) {
-          loadItems(activeLibraryId, {}, { field: 'created_at', direction: 'desc' }, { page: 0, page_size: 100 });
+          reloadCurrentView(activeLibraryId);
         }
       } finally {
         unlisten();

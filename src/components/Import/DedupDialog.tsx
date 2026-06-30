@@ -27,7 +27,7 @@ export function DedupDialog() {
   } = useUiStore();
 
   const { libraries, activeLibraryId } = useLibraryStore();
-  const loadItems = useItemStore((s) => s.loadItems);
+  const reloadCurrentView = useItemStore((s) => s.reloadCurrentView);
 
   if (!dedupActive || dedupItems.length === 0) return null;
 
@@ -84,7 +84,7 @@ export function DedupDialog() {
       }
 
       if (activeLibraryId) {
-        loadItems(activeLibraryId, {}, { field: 'created_at', direction: 'desc' }, { page: 0, page_size: 100 });
+        reloadCurrentView(activeLibraryId);
       }
     } catch (err) {
       console.error('Import commit failed:', err);
