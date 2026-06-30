@@ -6,9 +6,10 @@ import { useFilterStore } from '@/stores/filterStore';
 import { useUiStore } from '@/stores/uiStore';
 import { useItemStore } from '@/stores/itemStore';
 import { ImportButton } from '@/components/Import/ImportButton';
+import { SortControl } from '@/components/Toolbar/SortControl';
 import type { SearchResult } from '@/lib/types';
 import {
-  Search, LayoutGrid, List, SlidersHorizontal,
+  Search, LayoutGrid, List,
   ChevronLeft, ChevronRight, Sidebar as SidebarIcon,
   Image as ImageIcon,
 } from 'lucide-react';
@@ -17,8 +18,8 @@ import { TextInput } from '@/components/ui/TextInput';
 export function Toolbar() {
   const { libraries, activeLibraryId } = useLibraryStore();
   const { toggleSidebar, gridSize, setGridSize, viewMode, setViewMode } = useViewStore();
-  const { searchQuery, setSearchQuery, selectedTag, fileTypes, ratingMin, buildItemFilter } = useFilterStore();
-  const { setItems, loadItems } = useItemStore();
+  const { searchQuery, setSearchQuery } = useFilterStore();
+  const { setItems, reloadCurrentView } = useItemStore();
   const activeLib = libraries.find((l) => l.id === activeLibraryId);
 
   // Map gridSize (100-400) to zoom slider (10-100)
@@ -42,20 +43,11 @@ export function Toolbar() {
           .then((results) => setItems(results.map((r) => r.item), results.length))
           .catch((e) => useUiStore.getState().setError(String(e)));
       } else {
-        loadItems(
-          activeLibraryId,
-          {
-            ...buildItemFilter(),
-            ...(fileTypes.length > 0 && { file_types: fileTypes }),
-            ...(ratingMin != null && { rating_min: ratingMin }),
-            ...(selectedTag && { tag: selectedTag }),
-          },
-          { field: 'created_at', direction: 'desc' },
-          { page: 0, page_size: 100 },
-        );
+        // Clearing the search returns to the active view, honoring the current sort.
+        reloadCurrentView(activeLibraryId);
       }
     },
-    [activeLibraryId, setSearchQuery, setItems, loadItems, selectedTag, fileTypes, ratingMin, buildItemFilter],
+    [activeLibraryId, setSearchQuery, setItems, reloadCurrentView],
   );
 
   return (
@@ -110,7 +102,7 @@ export function Toolbar() {
       </div>
 
       {/* Right: Search & Actions */}
-      <div className="flex items-center gap-3 w-72 justify-end shrink-0">
+      <div className="flex items-center gap-3 w-[26rem] justify-end shrink-0">
         <div className="relative flex-1">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#999999]" />
           <TextInput
@@ -121,9 +113,7 @@ export function Toolbar() {
             className="pl-8 pr-3 py-1"
           />
         </div>
-        <button className="p-1.5 text-[#666666] hover:bg-[#ECECEC] rounded-md transition-colors duration-150">
-          <SlidersHorizontal size={16} />
-        </button>
+        <SortControl />
         <ImportButton />
       </div>
     </div>
