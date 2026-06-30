@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { Item, ItemFilter, SortSpec, Pagination, ItemPage } from '@/lib/types';
 import { useUiStore } from './uiStore';
+import { useFilterStore } from './filterStore';
 
 interface ItemState {
   items: Item[];
@@ -32,6 +33,14 @@ interface ItemActions {
   ) => Promise<void>;
   loadThumbnails: (itemIds: string[]) => Promise<void>;
   updateItem: (id: string, updates: { tags?: string; rating?: number; notes?: string }) => Promise<Item | null>;
+  /** Reload the main grid for whatever view is currently active in filterStore. */
+  reloadCurrentView: (libraryId: string) => Promise<void>;
+  /** Soft-delete (to Trash) or, with permanent=true, hard-delete the given items. */
+  deleteItems: (libraryId: string, ids: string[], permanent: boolean) => Promise<void>;
+  /** Restore items from Trash back to active. */
+  restoreItems: (libraryId: string, ids: string[]) => Promise<void>;
+  /** Permanently remove every item in Trash. */
+  emptyTrash: (libraryId: string) => Promise<void>;
 }
 
 export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
@@ -171,6 +180,49 @@ export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
       console.error('Failed to update item:', e);
       useUiStore.getState().setError(String(e));
       return null;
+    }
+  },
+
+  reloadCurrentView: async (libraryId) => {
+    const filter = useFilterStore.getState();
+    const sort: SortSpec = { field: filter.sortBy, direction: filter.sortOrder };
+    const page: Pagination = { page: 0, page_size: 100 };
+    if (filter.smartFolderId) {
+      await get().loadSmartFolderItems(libraryId, filter.smartFolderId, sort, page);
+    } else {
+      await get().loadItems(libraryId, filter.buildItemFilter(), sort, page);
+    }
+  },
+
+  deleteItems: async (libraryId, ids, permanent) => {
+    if (ids.length === 0) return;
+    try {
+      await invoke('delete_items', { itemIds: ids, permanent });
+      await get().reloadCurrentView(libraryId);
+    } catch (e) {
+      console.error('Failed to delete items:', e);
+      useUiStore.getState().setError(String(e));
+    }
+  },
+
+  restoreItems: async (libraryId, ids) => {
+    if (ids.length === 0) return;
+    try {
+      await invoke('restore_items', { itemIds: ids });
+      await get().reloadCurrentView(libraryId);
+    } catch (e) {
+      console.error('Failed to restore items:', e);
+      useUiStore.getState().setError(String(e));
+    }
+  },
+
+  emptyTrash: async (libraryId) => {
+    try {
+      await invoke('empty_trash');
+      await get().reloadCurrentView(libraryId);
+    } catch (e) {
+      console.error('Failed to empty trash:', e);
+      useUiStore.getState().setError(String(e));
     }
   },
 }));

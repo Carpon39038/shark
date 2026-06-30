@@ -35,7 +35,15 @@ export interface ItemFilter {
   rating_min?: number | null;
   search_query?: string | null;
   tag?: string | null;
+  /** Item status to query. Omit for active items; 'deleted' for the Trash view. */
+  status?: 'active' | 'deleted' | null;
+  /** Only items belonging to no folder (Uncategorized view). */
+  no_folder?: boolean;
+  /** Only items with no tags (Untagged view). */
+  no_tag?: boolean;
 }
+
+export type SpecialView = 'folder' | 'all' | 'uncategorized' | 'untagged' | 'trash';
 
 export interface SortSpec {
   field: string;

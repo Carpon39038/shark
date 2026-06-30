@@ -8,6 +8,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Toolbar } from '@/components/Toolbar/Toolbar';
 import { Sidebar } from '@/components/Sidebar/Sidebar';
 import { VirtualGrid } from '@/components/Grid/VirtualGrid';
+import { TrashBar } from '@/components/Grid/TrashBar';
 import { ImageViewer } from '@/components/Viewer/ImageViewer';
 import { ImportProgress } from '@/components/Import/ImportProgress';
 import { DropOverlay } from '@/components/Import/DropOverlay';
@@ -18,7 +19,7 @@ import type { ImportPrepResult, ImportResult } from '@/lib/types';
 const handleDropImport = async (paths: string[]) => {
   const { libraries, activeLibraryId } = useLibraryStore.getState();
   const { setImporting, setImportProgress, showDedupDialog, setPendingDropPaths } = useUiStore.getState();
-  const loadItems = useItemStore.getState().loadItems;
+  const reloadCurrentView = useItemStore.getState().reloadCurrentView;
 
   const lib = libraries.find((l) => l.id === activeLibraryId);
   if (!lib) {
@@ -48,7 +49,7 @@ const handleDropImport = async (paths: string[]) => {
     });
 
     if (activeLibraryId) {
-      loadItems(activeLibraryId, {}, { field: 'created_at', direction: 'desc' }, { page: 0, page_size: 100 });
+      reloadCurrentView(activeLibraryId);
     }
   } catch (err) {
     console.error('Drop import failed:', err);
@@ -101,7 +102,10 @@ function App() {
       <Toolbar />
       <div className="flex flex-1 overflow-hidden">
         {sidebarOpen && <Sidebar />}
-        <VirtualGrid />
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <TrashBar />
+          <VirtualGrid />
+        </div>
         {inspectorOpen && <Inspector />}
       </div>
       <ImageViewer />

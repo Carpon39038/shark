@@ -17,7 +17,7 @@ import { TextInput } from '@/components/ui/TextInput';
 export function Toolbar() {
   const { libraries, activeLibraryId } = useLibraryStore();
   const { toggleSidebar, gridSize, setGridSize, viewMode, setViewMode } = useViewStore();
-  const { searchQuery, setSearchQuery, selectedTag, fileTypes, ratingMin } = useFilterStore();
+  const { searchQuery, setSearchQuery, selectedTag, fileTypes, ratingMin, buildItemFilter } = useFilterStore();
   const { setItems, loadItems } = useItemStore();
   const activeLib = libraries.find((l) => l.id === activeLibraryId);
 
@@ -45,6 +45,7 @@ export function Toolbar() {
         loadItems(
           activeLibraryId,
           {
+            ...buildItemFilter(),
             ...(fileTypes.length > 0 && { file_types: fileTypes }),
             ...(ratingMin != null && { rating_min: ratingMin }),
             ...(selectedTag && { tag: selectedTag }),
@@ -54,7 +55,7 @@ export function Toolbar() {
         );
       }
     },
-    [activeLibraryId, setSearchQuery, setItems, loadItems, selectedTag, fileTypes, ratingMin],
+    [activeLibraryId, setSearchQuery, setItems, loadItems, selectedTag, fileTypes, ratingMin, buildItemFilter],
   );
 
   return (

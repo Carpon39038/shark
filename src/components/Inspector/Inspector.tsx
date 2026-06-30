@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useItemStore } from '@/stores/itemStore';
 import { Plus, X, Star } from 'lucide-react';
-import { TextInput, TextArea } from '@/components/ui/TextInput';
+import { TextArea } from '@/components/ui/TextInput';
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

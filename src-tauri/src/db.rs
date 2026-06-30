@@ -73,7 +73,20 @@ fn build_filter_params(filter: &ItemFilter) -> FilterParams {
         }
     }
 
-    where_clauses.push("status = 'active'".to_string());
+    // Uncategorized: items not referenced by any folder.
+    if filter.no_folder {
+        where_clauses.push("id NOT IN (SELECT item_id FROM item_folders)".to_string());
+    }
+
+    // Untagged: items with an empty tag list.
+    if filter.no_tag {
+        where_clauses.push("(tags IS NULL OR tags = '')".to_string());
+    }
+
+    // Status: defaults to "active"; the Trash view passes "deleted".
+    let status = filter.status.as_deref().unwrap_or("active");
+    where_clauses.push(format!("status = ?{}", param_values.len() + 1));
+    param_values.push(Box::new(status.to_string()));
 
     let where_sql = if where_clauses.is_empty() {
         String::new()
@@ -446,6 +459,28 @@ pub fn delete_items(conn: &Connection, ids: &[String], permanent: bool) -> Resul
     }
     tx.commit()?;
     Ok(())
+}
+
+/// Restore soft-deleted items back to active status (out of the Trash).
+pub fn restore_items(conn: &Connection, ids: &[String]) -> Result<(), AppError> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("?{i}")).collect();
+    let sql = format!(
+        "UPDATE items SET status = 'active', modified_at = datetime('now') WHERE id IN ({})",
+        placeholders.join(", ")
+    );
+    let params: Vec<&dyn rusqlite::types::ToSql> =
+        ids.iter().map(|id| id as &dyn rusqlite::types::ToSql).collect();
+    conn.execute(&sql, params.as_slice())?;
+    Ok(())
+}
+
+/// Permanently delete every item currently in the Trash. Returns the count removed.
+pub fn empty_trash(conn: &Connection) -> Result<usize, AppError> {
+    let removed = conn.execute("DELETE FROM items WHERE status = 'deleted'", [])?;
+    Ok(removed)
 }
 
 pub fn get_folders(conn: &Connection) -> Result<Vec<Folder>, AppError> {
@@ -978,6 +1013,86 @@ mod tests {
 
         delete_items(&conn, &["id-del".to_string()], true).unwrap();
         assert!(get_item(&conn, "id-del").is_err());
+    }
+
+    fn sort_desc() -> SortSpec {
+        SortSpec { field: "created_at".to_string(), direction: SortDirection::Desc }
+    }
+
+    fn page_all() -> Pagination {
+        Pagination { page: 0, page_size: 100 }
+    }
+
+    #[test]
+    fn test_special_view_filters() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        // 4 items. a: in folder + tagged. b: in folder, no tag. c: no folder, tagged. d: bare.
+        for (id, tags) in [("a", "x"), ("b", ""), ("c", "y"), ("d", "")] {
+            let mut item = make_test_item(id, id);
+            item.tags = tags.to_string();
+            insert_item(&conn, &item).unwrap();
+        }
+        let folder = create_folder(&conn, "F", None).unwrap();
+        add_items_to_folder(&conn, &folder.id, &["a".to_string(), "b".to_string()]).unwrap();
+
+        // All active: 4
+        let all = query_items(&conn, &ItemFilter::default(), &sort_desc(), &page_all()).unwrap();
+        assert_eq!(all.total, 4);
+
+        // Uncategorized (no folder): c, d
+        let uncat = query_items(
+            &conn,
+            &ItemFilter { no_folder: true, ..Default::default() },
+            &sort_desc(),
+            &page_all(),
+        )
+        .unwrap();
+        assert_eq!(uncat.total, 2);
+        let mut ids: Vec<_> = uncat.items.iter().map(|i| i.id.clone()).collect();
+        ids.sort();
+        assert_eq!(ids, vec!["c", "d"]);
+
+        // Untagged (no tag): b, d
+        let untagged = query_items(
+            &conn,
+            &ItemFilter { no_tag: true, ..Default::default() },
+            &sort_desc(),
+            &page_all(),
+        )
+        .unwrap();
+        assert_eq!(untagged.total, 2);
+        let mut ids: Vec<_> = untagged.items.iter().map(|i| i.id.clone()).collect();
+        ids.sort();
+        assert_eq!(ids, vec!["b", "d"]);
+
+        // Trash is empty until something is deleted.
+        let trash_filter = ItemFilter { status: Some("deleted".to_string()), ..Default::default() };
+        let trash = query_items(&conn, &trash_filter, &sort_desc(), &page_all()).unwrap();
+        assert_eq!(trash.total, 0);
+
+        // Soft-delete c -> shows in Trash, drops out of All.
+        delete_items(&conn, &["c".to_string()], false).unwrap();
+        let trash = query_items(&conn, &trash_filter, &sort_desc(), &page_all()).unwrap();
+        assert_eq!(trash.total, 1);
+        assert_eq!(trash.items[0].id, "c");
+        let all = query_items(&conn, &ItemFilter::default(), &sort_desc(), &page_all()).unwrap();
+        assert_eq!(all.total, 3);
+
+        // Restore c -> back in All, gone from Trash.
+        restore_items(&conn, &["c".to_string()]).unwrap();
+        assert_eq!(get_item(&conn, "c").unwrap().status.as_str(), "active");
+        let trash = query_items(&conn, &trash_filter, &sort_desc(), &page_all()).unwrap();
+        assert_eq!(trash.total, 0);
+
+        // Empty trash permanently removes only deleted items.
+        delete_items(&conn, &["d".to_string()], false).unwrap();
+        let removed = empty_trash(&conn).unwrap();
+        assert_eq!(removed, 1);
+        assert!(get_item(&conn, "d").is_err());
+        assert_eq!(query_items(&conn, &ItemFilter::default(), &sort_desc(), &page_all()).unwrap().total, 3);
     }
 
     #[test]

@@ -40,6 +40,8 @@ pub fn run() {
             commands::query_items,
             commands::get_item_detail,
             commands::delete_items,
+            commands::restore_items,
+            commands::empty_trash,
             commands::get_thumbnail,
             commands::get_thumbnails_batch,
             commands::search_items_cmd,

@@ -412,6 +412,16 @@ pub fn delete_items(
 }
 
 #[tauri::command]
+pub fn restore_items(item_ids: Vec<String>, state: State<'_, DbState>) -> Result<(), AppError> {
+    with_library_conn(&state, |conn| db::restore_items(conn, &item_ids))
+}
+
+#[tauri::command]
+pub fn empty_trash(state: State<'_, DbState>) -> Result<usize, AppError> {
+    with_library_conn(&state, |conn| db::empty_trash(conn))
+}
+
+#[tauri::command]
 pub fn get_thumbnail(
     item_id: String,
     size: ThumbnailSize,

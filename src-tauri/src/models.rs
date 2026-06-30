@@ -67,6 +67,15 @@ pub struct ItemFilter {
     pub rating_min: Option<i64>,
     pub search_query: Option<String>,
     pub tag: Option<String>,
+    /// Item status to query. Defaults to "active" when None (normal views);
+    /// set to "deleted" for the Trash view.
+    pub status: Option<String>,
+    /// When true, only items that belong to no folder (Uncategorized view).
+    #[serde(default)]
+    pub no_folder: bool,
+    /// When true, only items that have no tags (Untagged view).
+    #[serde(default)]
+    pub no_tag: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
