@@ -18,6 +18,10 @@ export interface Item {
   notes: string;
   sha256: string;
   status: 'active' | 'deleted' | 'corrupted';
+  /** JSON array of dominant colors as `#RRGGBB` hex strings (Inspector display). */
+  colors: string;
+  /** Comma-wrapped palette bucket list, e.g. ",red,blue," (palette filter). */
+  color_buckets: string;
   created_at: string;
   modified_at: string;
 }
@@ -35,6 +39,8 @@ export interface ItemFilter {
   rating_min?: number | null;
   search_query?: string | null;
   tag?: string | null;
+  /** Palette bucket key (e.g. "red"). Matches items whose color_buckets contains it. */
+  color?: string | null;
   /** Item status to query. Omit for active items; 'deleted' for the Trash view. */
   status?: 'active' | 'deleted' | null;
   /** Only items belonging to no folder (Uncategorized view). */
@@ -179,6 +185,30 @@ export const OPERATORS_BY_KIND: Record<FieldKind, { value: string; label: string
     { value: 'between', label: 'between' },
   ],
 };
+
+// Fixed palette buckets for the sidebar color filter. `key` matches the backend
+// bucket names (color.rs `rgb_to_bucket`) and the stored `color_buckets` values;
+// `swatch` is a representative display color.
+export interface ColorBucket {
+  key: string;
+  label: string;
+  swatch: string;
+}
+
+export const COLOR_BUCKETS: ColorBucket[] = [
+  { key: 'red', label: 'Red', swatch: '#E53935' },
+  { key: 'orange', label: 'Orange', swatch: '#FB8C00' },
+  { key: 'yellow', label: 'Yellow', swatch: '#FDD835' },
+  { key: 'green', label: 'Green', swatch: '#43A047' },
+  { key: 'cyan', label: 'Cyan', swatch: '#00ACC1' },
+  { key: 'blue', label: 'Blue', swatch: '#1E88E5' },
+  { key: 'purple', label: 'Purple', swatch: '#8E24AA' },
+  { key: 'pink', label: 'Pink', swatch: '#EC407A' },
+  { key: 'brown', label: 'Brown', swatch: '#6D4C41' },
+  { key: 'black', label: 'Black', swatch: '#1D1D1F' },
+  { key: 'white', label: 'White', swatch: '#FFFFFF' },
+  { key: 'gray', label: 'Gray', swatch: '#9E9E9E' },
+];
 
 // Special case: file_type also supports in/not_in
 export const FILE_TYPE_OPERATORS = [

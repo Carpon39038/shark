@@ -287,6 +287,7 @@ where
         .map(|pf| {
             let dest_path = copy_to_library(&pf.source_path, library_path, &pf.id)?;
             let thumb_path = generate_thumbnail(&dest_path, &thumb_dir, &pf.id, 720).ok();
+            let (colors, color_buckets) = crate::color::extract_for_path(&dest_path);
 
             let now = chrono::Utc::now().to_rfc3339();
             let item = Item {
@@ -302,6 +303,8 @@ where
                 notes: String::new(),
                 sha256: pf.sha256,
                 status: ItemStatus::Active,
+                colors,
+                color_buckets,
                 created_at: now.clone(),
                 modified_at: now,
             };

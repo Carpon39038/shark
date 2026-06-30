@@ -3,11 +3,13 @@ import { invoke } from '@tauri-apps/api/core';
 import { Tag } from 'lucide-react';
 import { useFilterStore } from '@/stores/filterStore';
 import { useLibraryStore } from '@/stores/libraryStore';
+import { useItemStore } from '@/stores/itemStore';
 import type { TagCount } from '@/lib/types';
 
 export function TagPanel() {
   const { selectedTag, setSelectedTag } = useFilterStore();
   const activeLibraryId = useLibraryStore((s) => s.activeLibraryId);
+  const reloadCurrentView = useItemStore((s) => s.reloadCurrentView);
   const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,8 +31,13 @@ export function TagPanel() {
     }
   };
 
+  const applyTag = (tag: string | null) => {
+    setSelectedTag(tag);
+    if (activeLibraryId) reloadCurrentView(activeLibraryId);
+  };
+
   const handleTagClick = (tag: string) => {
-    setSelectedTag(selectedTag === tag ? null : tag);
+    applyTag(selectedTag === tag ? null : tag);
   };
 
   if (loading) {
@@ -52,7 +59,7 @@ export function TagPanel() {
         </div>
         {selectedTag && (
           <button
-            onClick={() => setSelectedTag(null)}
+            onClick={() => applyTag(null)}
             className="text-[10px] text-[#0063E1] hover:underline"
           >
             Clear

@@ -27,10 +27,12 @@ pub fn row_to_item(row: &Row) -> Result<Item, rusqlite::Error> {
         status,
         created_at: row.get(12)?,
         modified_at: row.get(13)?,
+        colors: row.get(14)?,
+        color_buckets: row.get(15)?,
     })
 }
 
-const ITEM_COLUMNS: &str = "id, file_path, file_name, file_size, file_type, width, height, tags, rating, notes, sha256, status, created_at, modified_at";
+const ITEM_COLUMNS: &str = "id, file_path, file_name, file_size, file_type, width, height, tags, rating, notes, sha256, status, created_at, modified_at, colors, color_buckets";
 
 struct FilterParams {
     where_sql: String,
@@ -70,6 +72,13 @@ fn build_filter_params(filter: &ItemFilter) -> FilterParams {
         if !tag.is_empty() {
             where_clauses.push(format!("(',' || tags || ',') LIKE ?{}", param_values.len() + 1));
             param_values.push(Box::new(format!("%,{tag},%")));
+        }
+    }
+
+    if let Some(ref color) = filter.color {
+        if !color.is_empty() {
+            where_clauses.push(format!("color_buckets LIKE ?{}", param_values.len() + 1));
+            param_values.push(Box::new(format!("%,{color},%")));
         }
     }
 
@@ -316,19 +325,31 @@ fn run_library_migrations(conn: &Connection) -> Result<(), AppError> {
         )?;
         conn.pragma_update(None, "user_version", 1)?;
     }
+    if version < 2 {
+        // Dominant-color extraction. `colors` holds a JSON array of hex strings
+        // for display; `color_buckets` holds a comma-wrapped bucket list
+        // (e.g. ",red,blue,") for the palette filter. Existing rows default to
+        // empty and are simply never matched by a color filter.
+        conn.execute_batch(
+            "ALTER TABLE items ADD COLUMN colors TEXT NOT NULL DEFAULT '';
+             ALTER TABLE items ADD COLUMN color_buckets TEXT NOT NULL DEFAULT '';
+             CREATE INDEX idx_items_color_buckets ON items(color_buckets);",
+        )?;
+        conn.pragma_update(None, "user_version", 2)?;
+    }
     Ok(())
 }
 
 pub fn insert_item(conn: &Connection, item: &Item) -> Result<(), AppError> {
     let status_str = item.status.as_str();
     conn.execute(
-        "INSERT INTO items (id, file_path, file_name, file_size, file_type, width, height, tags, rating, notes, sha256, status, created_at, modified_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+        "INSERT INTO items (id, file_path, file_name, file_size, file_type, width, height, tags, rating, notes, sha256, status, created_at, modified_at, colors, color_buckets)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         params![
             item.id, item.file_path, item.file_name, item.file_size,
             item.file_type, item.width, item.height, item.tags,
             item.rating, item.notes, item.sha256, status_str,
-            item.created_at, item.modified_at
+            item.created_at, item.modified_at, item.colors, item.color_buckets
         ],
     )?;
     Ok(())
@@ -922,6 +943,8 @@ mod tests {
             notes: String::new(),
             sha256: format!("hash{suffix}"),
             status: ItemStatus::Active,
+            colors: String::new(),
+            color_buckets: String::new(),
             created_at: "2026-04-02T12:00:00".to_string(),
             modified_at: "2026-04-02T12:00:00".to_string(),
         }
@@ -1093,6 +1116,82 @@ mod tests {
         assert_eq!(removed, 1);
         assert!(get_item(&conn, "d").is_err());
         assert_eq!(query_items(&conn, &ItemFilter::default(), &sort_desc(), &page_all()).unwrap().total, 3);
+    }
+
+    #[test]
+    fn test_color_columns_and_filter() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        // Migration v2 should have added the color columns.
+        let cols: Vec<String> = conn
+            .prepare("PRAGMA table_info(items)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert!(cols.contains(&"colors".to_string()));
+        assert!(cols.contains(&"color_buckets".to_string()));
+
+        // Two items: one red+blue, one green. Plus one legacy item with no colors.
+        let mut red = make_test_item("red", "r");
+        red.colors = "[\"#FF0000\"]".to_string();
+        red.color_buckets = ",red,blue,".to_string();
+        insert_item(&conn, &red).unwrap();
+
+        let mut green = make_test_item("green", "g");
+        green.color_buckets = ",green,".to_string();
+        insert_item(&conn, &green).unwrap();
+
+        let legacy = make_test_item("legacy", "l"); // empty color_buckets
+        insert_item(&conn, &legacy).unwrap();
+
+        // Filter by red -> only the red item.
+        let by_red = query_items(
+            &conn,
+            &ItemFilter { color: Some("red".to_string()), ..Default::default() },
+            &sort_desc(),
+            &page_all(),
+        )
+        .unwrap();
+        assert_eq!(by_red.total, 1);
+        assert_eq!(by_red.items[0].id, "red");
+        // Round-trip of the display colors column.
+        assert_eq!(by_red.items[0].colors, "[\"#FF0000\"]");
+
+        // Filter by blue -> also the red item (it has blue in its buckets).
+        let by_blue = query_items(
+            &conn,
+            &ItemFilter { color: Some("blue".to_string()), ..Default::default() },
+            &sort_desc(),
+            &page_all(),
+        )
+        .unwrap();
+        assert_eq!(by_blue.total, 1);
+        assert_eq!(by_blue.items[0].id, "red");
+
+        // Substring safety: "ed" must not match "red".
+        let by_ed = query_items(
+            &conn,
+            &ItemFilter { color: Some("ed".to_string()), ..Default::default() },
+            &sort_desc(),
+            &page_all(),
+        )
+        .unwrap();
+        assert_eq!(by_ed.total, 0);
+
+        // Legacy item (no colors) is never matched by a color filter.
+        let by_green = query_items(
+            &conn,
+            &ItemFilter { color: Some("green".to_string()), ..Default::default() },
+            &sort_desc(),
+            &page_all(),
+        )
+        .unwrap();
+        assert_eq!(by_green.total, 1);
+        assert_eq!(by_green.items[0].id, "green");
     }
 
     #[test]

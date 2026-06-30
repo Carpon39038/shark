@@ -48,6 +48,12 @@ pub struct Item {
     pub notes: String,
     pub sha256: String,
     pub status: ItemStatus,
+    /// JSON array of dominant colors as `#RRGGBB` hex strings (Inspector display).
+    #[serde(default)]
+    pub colors: String,
+    /// Comma-wrapped bucket list (e.g. `,red,blue,`) for the palette filter.
+    #[serde(default)]
+    pub color_buckets: String,
     pub created_at: String,
     pub modified_at: String,
 }
@@ -67,6 +73,10 @@ pub struct ItemFilter {
     pub rating_min: Option<i64>,
     pub search_query: Option<String>,
     pub tag: Option<String>,
+    /// Palette bucket key (e.g. "red"). Matches items whose `color_buckets`
+    /// contains it. None = no color filter.
+    #[serde(default)]
+    pub color: Option<String>,
     /// Item status to query. Defaults to "active" when None (normal views);
     /// set to "deleted" for the Trash view.
     pub status: Option<String>,

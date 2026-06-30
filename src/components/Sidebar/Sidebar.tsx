@@ -5,6 +5,7 @@ import { SmartFolderList } from './SmartFolderList';
 import { SmartFolderEditor } from './SmartFolderEditor';
 import { SidebarDropZone } from './SidebarDropZone';
 import { TagPanel } from './TagPanel';
+import { ColorFilter } from './ColorFilter';
 import type { SmartFolder } from '@/lib/types';
 
 export function Sidebar() {
@@ -27,6 +28,7 @@ export function Sidebar() {
       <FolderList />
       <SmartFolderList onEdit={handleEdit} onCreate={handleCreate} />
       <TagPanel />
+      <ColorFilter />
       {editorOpen && (
         <SmartFolderEditor
           folder={editingFolder}
