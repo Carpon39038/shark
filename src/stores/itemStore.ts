@@ -4,6 +4,11 @@ import type { Item, ItemFilter, SortSpec, Pagination, ItemPage } from '@/lib/typ
 import { useUiStore } from './uiStore';
 import { useFilterStore } from './filterStore';
 
+/** Split a comma-separated tag string into trimmed, non-empty tags. */
+function parseTags(raw: string): string[] {
+  return raw.split(',').map((t) => t.trim()).filter(Boolean);
+}
+
 interface ItemState {
   items: Item[];
   selectedIds: Set<string>;
@@ -17,6 +22,8 @@ interface ItemActions {
   addItem: (item: Item, thumbnailPath?: string) => void;
   toggleSelect: (id: string) => void;
   selectRange: (fromId: string, toId: string, append?: boolean) => void;
+  selectAll: () => void;
+  invertSelection: () => void;
   clearSelection: () => void;
   setLoading: (loading: boolean) => void;
   loadItems: (
@@ -41,6 +48,12 @@ interface ItemActions {
   restoreItems: (libraryId: string, ids: string[]) => Promise<void>;
   /** Permanently remove every item in Trash. */
   emptyTrash: (libraryId: string) => Promise<void>;
+  /** Add the given tags to every item in ids. */
+  addTags: (libraryId: string, ids: string[], tags: string[]) => Promise<void>;
+  /** Remove the given tags from every item in ids. */
+  removeTags: (libraryId: string, ids: string[], tags: string[]) => Promise<void>;
+  /** Set the rating (0-5) on every item in ids. */
+  setRating: (libraryId: string, ids: string[], rating: number) => Promise<void>;
 }
 
 export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
@@ -93,6 +106,18 @@ export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
       set({ selectedIds: new Set(rangeIds) });
     }
   },
+
+  selectAll: () =>
+    set((state) => ({ selectedIds: new Set(state.items.map((i) => i.id)) })),
+
+  invertSelection: () =>
+    set((state) => {
+      const next = new Set<string>();
+      for (const item of state.items) {
+        if (!state.selectedIds.has(item.id)) next.add(item.id);
+      }
+      return { selectedIds: next };
+    }),
 
   clearSelection: () => set({ selectedIds: new Set<string>() }),
 
@@ -222,6 +247,62 @@ export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
       await get().reloadCurrentView(libraryId);
     } catch (e) {
       console.error('Failed to empty trash:', e);
+      useUiStore.getState().setError(String(e));
+    }
+  },
+
+  addTags: async (_libraryId, ids, tags) => {
+    if (ids.length === 0 || tags.length === 0) return;
+    try {
+      await invoke('add_tags_to_items', { itemIds: ids, tags });
+      const idSet = new Set(ids);
+      set((state) => ({
+        items: state.items.map((item) => {
+          if (!idSet.has(item.id)) return item;
+          const list = parseTags(item.tags);
+          for (const tag of tags) {
+            if (!list.includes(tag)) list.push(tag);
+          }
+          return { ...item, tags: list.join(',') };
+        }),
+      }));
+    } catch (e) {
+      console.error('Failed to add tags:', e);
+      useUiStore.getState().setError(String(e));
+    }
+  },
+
+  removeTags: async (_libraryId, ids, tags) => {
+    if (ids.length === 0 || tags.length === 0) return;
+    try {
+      await invoke('remove_tags_from_items', { itemIds: ids, tags });
+      const idSet = new Set(ids);
+      const removeSet = new Set(tags);
+      set((state) => ({
+        items: state.items.map((item) => {
+          if (!idSet.has(item.id)) return item;
+          const list = parseTags(item.tags).filter((t) => !removeSet.has(t));
+          return { ...item, tags: list.join(',') };
+        }),
+      }));
+    } catch (e) {
+      console.error('Failed to remove tags:', e);
+      useUiStore.getState().setError(String(e));
+    }
+  },
+
+  setRating: async (_libraryId, ids, rating) => {
+    if (ids.length === 0) return;
+    try {
+      await invoke('set_items_rating', { itemIds: ids, rating });
+      const idSet = new Set(ids);
+      set((state) => ({
+        items: state.items.map((item) =>
+          idSet.has(item.id) ? { ...item, rating } : item,
+        ),
+      }));
+    } catch (e) {
+      console.error('Failed to set rating:', e);
       useUiStore.getState().setError(String(e));
     }
   },

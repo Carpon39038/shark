@@ -606,6 +606,88 @@ pub fn remove_items_from_folder(conn: &Connection, folder_id: &str, item_ids: &[
     Ok(())
 }
 
+/// Split a comma-separated tag string into trimmed, non-empty tags.
+fn parse_tags(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(|t| t.trim())
+        .filter(|t| !t.is_empty())
+        .map(|t| t.to_string())
+        .collect()
+}
+
+/// Add each of `tags` to every item in `ids`, preserving existing order and
+/// skipping duplicates. Tags are stored as a comma-separated string.
+pub fn add_tags_to_items(conn: &Connection, ids: &[String], tags: &[String]) -> Result<(), AppError> {
+    if ids.is_empty() || tags.is_empty() {
+        return Ok(());
+    }
+    let tx = conn.unchecked_transaction()?;
+    for id in ids {
+        let current: String = tx.query_row(
+            "SELECT tags FROM items WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        let mut list = parse_tags(&current);
+        for tag in tags {
+            if !list.iter().any(|t| t == tag) {
+                list.push(tag.clone());
+            }
+        }
+        tx.execute(
+            "UPDATE items SET tags = ?1, modified_at = datetime('now') WHERE id = ?2",
+            params![list.join(","), id],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Remove each of `tags` from every item in `ids`. Items without the tag are
+/// left unchanged.
+pub fn remove_tags_from_items(conn: &Connection, ids: &[String], tags: &[String]) -> Result<(), AppError> {
+    if ids.is_empty() || tags.is_empty() {
+        return Ok(());
+    }
+    let tx = conn.unchecked_transaction()?;
+    for id in ids {
+        let current: String = tx.query_row(
+            "SELECT tags FROM items WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        let list: Vec<String> = parse_tags(&current)
+            .into_iter()
+            .filter(|t| !tags.iter().any(|r| r == t))
+            .collect();
+        tx.execute(
+            "UPDATE items SET tags = ?1, modified_at = datetime('now') WHERE id = ?2",
+            params![list.join(","), id],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Set the rating (0-5) on every item in `ids`.
+pub fn set_items_rating(conn: &Connection, ids: &[String], rating: i64) -> Result<(), AppError> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    let placeholders: Vec<String> = (2..=ids.len() + 1).map(|i| format!("?{i}")).collect();
+    let sql = format!(
+        "UPDATE items SET rating = ?1, modified_at = datetime('now') WHERE id IN ({})",
+        placeholders.join(", ")
+    );
+    let mut params: Vec<&dyn rusqlite::types::ToSql> = Vec::with_capacity(ids.len() + 1);
+    params.push(&rating);
+    for id in ids {
+        params.push(id as &dyn rusqlite::types::ToSql);
+    }
+    conn.execute(&sql, params.as_slice())?;
+    Ok(())
+}
+
 pub fn get_all_tags(conn: &Connection) -> Result<Vec<String>, AppError> {
     let mut stmt = conn.prepare("SELECT DISTINCT tags FROM items WHERE tags != '' AND status = 'active'")?;
     let rows = stmt.query_map([], |row| {
@@ -1013,6 +1095,68 @@ mod tests {
 
         delete_items(&conn, &["id-del".to_string()], true).unwrap();
         assert!(get_item(&conn, "id-del").is_err());
+    }
+
+    #[test]
+    fn test_add_tags_to_items_dedups_and_preserves() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        let mut a = make_test_item("a", "a");
+        a.tags = "red,blue".to_string();
+        insert_item(&conn, &a).unwrap();
+        let b = make_test_item("b", "b"); // no tags
+        insert_item(&conn, &b).unwrap();
+
+        add_tags_to_items(
+            &conn,
+            &["a".to_string(), "b".to_string()],
+            &["blue".to_string(), "green".to_string()],
+        )
+        .unwrap();
+
+        // "blue" already present on a → not duplicated; order preserved.
+        assert_eq!(get_item(&conn, "a").unwrap().tags, "red,blue,green");
+        assert_eq!(get_item(&conn, "b").unwrap().tags, "blue,green");
+    }
+
+    #[test]
+    fn test_remove_tags_from_items() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        let mut a = make_test_item("a", "a");
+        a.tags = "red,blue,green".to_string();
+        insert_item(&conn, &a).unwrap();
+
+        remove_tags_from_items(&conn, &["a".to_string()], &["blue".to_string()]).unwrap();
+        assert_eq!(get_item(&conn, "a").unwrap().tags, "red,green");
+
+        // Removing a tag that isn't present leaves the item unchanged.
+        remove_tags_from_items(&conn, &["a".to_string()], &["yellow".to_string()]).unwrap();
+        assert_eq!(get_item(&conn, "a").unwrap().tags, "red,green");
+    }
+
+    #[test]
+    fn test_set_items_rating() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        for id in ["a", "b", "c"] {
+            insert_item(&conn, &make_test_item(id, id)).unwrap();
+        }
+
+        set_items_rating(&conn, &["a".to_string(), "c".to_string()], 4).unwrap();
+        assert_eq!(get_item(&conn, "a").unwrap().rating, 4);
+        assert_eq!(get_item(&conn, "b").unwrap().rating, 0); // untouched
+        assert_eq!(get_item(&conn, "c").unwrap().rating, 4);
+
+        // Clearing the rating works too.
+        set_items_rating(&conn, &["a".to_string()], 0).unwrap();
+        assert_eq!(get_item(&conn, "a").unwrap().rating, 0);
     }
 
     fn sort_desc() -> SortSpec {

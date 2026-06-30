@@ -666,3 +666,30 @@ pub fn remove_items_from_folder(
         db::remove_items_from_folder(conn, &folder_id, &item_ids)
     })
 }
+
+#[tauri::command]
+pub fn add_tags_to_items(
+    item_ids: Vec<String>,
+    tags: Vec<String>,
+    state: State<'_, DbState>,
+) -> Result<(), AppError> {
+    with_library_conn(&state, |conn| db::add_tags_to_items(conn, &item_ids, &tags))
+}
+
+#[tauri::command]
+pub fn remove_tags_from_items(
+    item_ids: Vec<String>,
+    tags: Vec<String>,
+    state: State<'_, DbState>,
+) -> Result<(), AppError> {
+    with_library_conn(&state, |conn| db::remove_tags_from_items(conn, &item_ids, &tags))
+}
+
+#[tauri::command]
+pub fn set_items_rating(
+    item_ids: Vec<String>,
+    rating: i64,
+    state: State<'_, DbState>,
+) -> Result<(), AppError> {
+    with_library_conn(&state, |conn| db::set_items_rating(conn, &item_ids, rating))
+}
