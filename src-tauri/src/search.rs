@@ -38,10 +38,13 @@ pub fn search_items(
         .collect::<Vec<_>>()
         .join(" OR ");
 
+    // Column order must match `row_to_item`'s indices (id..color_buckets, 0–15);
+    // f.rank follows at index 16.
     let sql = "
         SELECT i.id, i.file_path, i.file_name, i.file_size, i.file_type,
                i.width, i.height, i.tags, i.rating, i.notes, i.sha256,
-               i.status, i.created_at, i.modified_at, f.rank
+               i.status, i.created_at, i.modified_at, i.colors, i.color_buckets,
+               f.rank
         FROM items_fts f
         JOIN items i ON i.rowid = f.rowid
         WHERE items_fts MATCH ?1 AND i.status = 'active'
@@ -54,7 +57,7 @@ pub fn search_items(
         .query_map(params![fts_query, limit], |row| {
             Ok(SearchResult {
                 item: row_to_item(row)?,
-                rank: row.get(14)?,
+                rank: row.get(16)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -82,6 +85,8 @@ mod tests {
             notes: String::new(),
             sha256: format!("hash-{id}"),
             status: ItemStatus::Active,
+            colors: String::new(),
+            color_buckets: String::new(),
             created_at: "2026-04-02T12:00:00".to_string(),
             modified_at: "2026-04-02T12:00:00".to_string(),
         }

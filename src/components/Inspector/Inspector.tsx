@@ -26,6 +26,17 @@ function getExt(fileName: string): string {
   return fileName.split('.').pop()?.toUpperCase() || '';
 }
 
+/** Parse the item's `colors` column (JSON array of hex strings) defensively. */
+function parseColors(colors: string | undefined): string[] {
+  if (!colors) return [];
+  try {
+    const parsed = JSON.parse(colors);
+    return Array.isArray(parsed) ? parsed.filter((c) => typeof c === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 export function Inspector() {
   const { items, selectedIds, thumbnailPaths, updateItem } = useItemStore();
 
@@ -93,6 +104,7 @@ export function Inspector() {
   const ext = getExt(item.file_name);
   const dim = item.width && item.height ? `${item.width}x${item.height}` : 'N/A';
   const size = formatFileSize(item.file_size);
+  const colors = parseColors(item.colors);
 
   return (
     <div className="w-72 bg-[#F6F6F6] border-l border-gray-200 flex flex-col overflow-y-auto shrink-0 text-[13px]">
@@ -135,6 +147,23 @@ export function Inspector() {
             )}
           </div>
         </div>
+
+        {/* Colors */}
+        {colors.length > 0 && (
+          <div>
+            <div className="text-[11px] font-semibold text-[#999999] uppercase tracking-wider mb-1.5">Colors</div>
+            <div className="flex items-center gap-1.5">
+              {colors.map((hex, i) => (
+                <div
+                  key={`${hex}-${i}`}
+                  title={hex}
+                  className="w-6 h-6 rounded-md border border-[#E5E5E5] shadow-sm"
+                  style={{ backgroundColor: hex }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Notes */}
         <div>
