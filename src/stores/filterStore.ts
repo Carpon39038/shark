@@ -10,6 +10,8 @@ interface FilterState {
   ratingMin: number | null;
   smartFolderId: string | null;
   selectedTag: string | null;
+  /** Selected palette bucket key (e.g. "red"); null = no color filter. */
+  selectedColor: string | null;
   /** Which view drives the main grid. 'folder' uses selectedFolderId. */
   activeView: SpecialView;
   /** Folder id when activeView === 'folder'; null means no folder chosen. */
@@ -24,19 +26,18 @@ interface FilterActions {
   setRatingMin: (rating: number | null) => void;
   setSmartFolderId: (id: string | null) => void;
   setSelectedTag: (tag: string | null) => void;
+  setSelectedColor: (color: string | null) => void;
   /** Select a regular folder (sets activeView to 'folder'). */
   selectFolder: (folderId: string | null) => void;
   /** Select one of the special views (All / Uncategorized / Untagged / Trash). */
   selectSpecialView: (view: SpecialView) => void;
   resetFilters: () => void;
-  /** Build the ItemFilter for the current activeView (view membership only). */
-  buildItemFilter: () => ItemFilter;
   /**
-   * Build the complete ItemFilter for the active view, including the
-   * cross-view refinements (tag, rating floor, file types). This is what
-   * actually populates the grid, so it's what any reload must reproduce.
+   * Build the complete ItemFilter for the current view — the view dimension
+   * plus the secondary filters (tag, color, rating floor, file types). This is
+   * what populates the grid, so it's what any reload must reproduce.
    */
-  buildFullItemFilter: () => ItemFilter;
+  buildItemFilter: () => ItemFilter;
 }
 
 const initialState: FilterState = {
@@ -47,6 +48,7 @@ const initialState: FilterState = {
   ratingMin: null,
   smartFolderId: null,
   selectedTag: null,
+  selectedColor: null,
   activeView: 'all',
   selectedFolderId: null,
 };
@@ -70,39 +72,43 @@ export const useFilterStore = create<FilterState & FilterActions>()(
 
       setSelectedTag: (tag) => set({ selectedTag: tag }),
 
+      setSelectedColor: (color) => set({ selectedColor: color }),
+
       selectFolder: (folderId) =>
-        set({ activeView: 'folder', selectedFolderId: folderId, smartFolderId: null, selectedTag: null }),
+        set({ activeView: 'folder', selectedFolderId: folderId, smartFolderId: null, selectedTag: null, selectedColor: null }),
 
       selectSpecialView: (view) =>
-        set({ activeView: view, selectedFolderId: null, smartFolderId: null, selectedTag: null }),
+        set({ activeView: view, selectedFolderId: null, smartFolderId: null, selectedTag: null, selectedColor: null }),
 
       resetFilters: () => set(initialState),
 
       buildItemFilter: () => {
-        const { activeView, selectedFolderId } = get();
-        switch (activeView) {
-          case 'folder':
-            return { folder_id: selectedFolderId };
-          case 'uncategorized':
-            return { no_folder: true };
-          case 'untagged':
-            return { no_tag: true };
-          case 'trash':
-            return { status: 'deleted' };
-          case 'all':
-          default:
-            return {};
-        }
-      },
+        const { activeView, selectedFolderId, selectedTag, selectedColor, fileTypes, ratingMin } = get();
 
-      buildFullItemFilter: () => {
-        const { fileTypes, ratingMin, selectedTag } = get();
-        return {
-          ...get().buildItemFilter(),
-          ...(fileTypes.length > 0 && { file_types: fileTypes }),
-          ...(ratingMin != null && { rating_min: ratingMin }),
-          ...(selectedTag && { tag: selectedTag }),
-        };
+        // View dimension.
+        const filter: ItemFilter = (() => {
+          switch (activeView) {
+            case 'folder':
+              return { folder_id: selectedFolderId };
+            case 'uncategorized':
+              return { no_folder: true };
+            case 'untagged':
+              return { no_tag: true };
+            case 'trash':
+              return { status: 'deleted' };
+            case 'all':
+            default:
+              return {};
+          }
+        })();
+
+        // Secondary filters apply across every view.
+        if (selectedTag) filter.tag = selectedTag;
+        if (selectedColor) filter.color = selectedColor;
+        if (fileTypes.length > 0) filter.file_types = fileTypes;
+        if (ratingMin != null) filter.rating_min = ratingMin;
+
+        return filter;
       },
     }),
     {

@@ -128,7 +128,7 @@ export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
       } else {
         ids = await invoke<string[]>('query_item_ids', {
           libraryId: activeLibraryId ?? '',
-          filter: filter.buildFullItemFilter(),
+          filter: filter.buildItemFilter(),
           sort,
         });
       }
@@ -251,7 +251,7 @@ export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
     if (filter.smartFolderId) {
       await get().loadSmartFolderItems(libraryId, filter.smartFolderId, sort, page, preserveSelection);
     } else {
-      await get().loadItems(libraryId, filter.buildFullItemFilter(), sort, page, preserveSelection);
+      await get().loadItems(libraryId, filter.buildItemFilter(), sort, page, preserveSelection);
     }
   },
 

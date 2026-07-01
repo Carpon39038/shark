@@ -188,6 +188,7 @@ pub async fn import_commit(
             .map(|pf| {
                 let dest_path = crate::indexer::copy_to_library(&pf.source_path, Path::new(&lib_path), &pf.id)?;
                 let thumb_path = crate::thumbnail::generate_thumbnail(&dest_path, &thumb_dir, &pf.id, 720).ok();
+                let (colors, color_buckets) = crate::color::extract_for_path(&dest_path);
 
                 let now = chrono::Utc::now().to_rfc3339();
                 let item = Item {
@@ -203,6 +204,8 @@ pub async fn import_commit(
                     notes: String::new(),
                     sha256: pf.sha256,
                     status: ItemStatus::Active,
+                    colors,
+                    color_buckets,
                     created_at: now.clone(),
                     modified_at: now,
                 };
@@ -324,6 +327,7 @@ pub async fn import_commit_paths(
             .map(|pf| {
                 let dest_path = crate::indexer::copy_to_library(&pf.source_path, Path::new(&lib_path), &pf.id)?;
                 let thumb_path = crate::thumbnail::generate_thumbnail(&dest_path, &thumb_dir, &pf.id, 720).ok();
+                let (colors, color_buckets) = crate::color::extract_for_path(&dest_path);
 
                 let now = chrono::Utc::now().to_rfc3339();
                 let item = Item {
@@ -339,6 +343,8 @@ pub async fn import_commit_paths(
                     notes: String::new(),
                     sha256: pf.sha256,
                     status: ItemStatus::Active,
+                    colors,
+                    color_buckets,
                     created_at: now.clone(),
                     modified_at: now,
                 };
