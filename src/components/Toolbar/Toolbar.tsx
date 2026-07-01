@@ -11,15 +11,18 @@ import type { SearchResult } from '@/lib/types';
 import {
   Search, LayoutGrid, List,
   ChevronLeft, ChevronRight, Sidebar as SidebarIcon,
-  Image as ImageIcon,
+  Image as ImageIcon, RefreshCw,
 } from 'lucide-react';
 import { TextInput } from '@/components/ui/TextInput';
+import { checkForUpdates } from '@/lib/updater';
 
 export function Toolbar() {
   const { libraries, activeLibraryId } = useLibraryStore();
   const { toggleSidebar, gridSize, setGridSize, viewMode, setViewMode } = useViewStore();
   const { searchQuery, setSearchQuery } = useFilterStore();
   const { setItems, reloadCurrentView } = useItemStore();
+  const updateChecking = useUiStore((s) => s.updateChecking);
+  const updateAvailable = useUiStore((s) => s.updateAvailable);
   const activeLib = libraries.find((l) => l.id === activeLibraryId);
 
   // Map gridSize (100-400) to zoom slider (10-100)
@@ -113,6 +116,18 @@ export function Toolbar() {
             className="pl-8 pr-3 py-1"
           />
         </div>
+        <button
+          onClick={() => checkForUpdates(false)}
+          disabled={updateChecking}
+          title={updateAvailable ? `有新版本 ${updateAvailable.version} 可用` : '检查更新'}
+          className={`p-1.5 rounded-md transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${
+            updateAvailable
+              ? 'text-[#0063E1] hover:bg-gray-200'
+              : 'text-[#666666] hover:bg-gray-200 hover:text-[#1D1D1F]'
+          }`}
+        >
+          <RefreshCw size={16} className={updateChecking ? 'animate-spin' : ''} />
+        </button>
         <SortControl />
         <ImportButton />
       </div>

@@ -12,6 +12,11 @@ export interface ImportProgress {
   total: number;
 }
 
+export interface UpdateInfo {
+  version: string;
+  notes?: string;
+}
+
 interface UiState {
   viewerOpen: boolean;
   viewerItemId: string | null;
@@ -28,6 +33,9 @@ interface UiState {
   dedupSourcePath: string | null;
   isDragOver: boolean;
   pendingDropPaths: string[] | null;
+  updateAvailable: UpdateInfo | null;
+  updateChecking: boolean;
+  updateDownloading: boolean;
 }
 
 interface UiActions {
@@ -45,6 +53,9 @@ interface UiActions {
   setDedupDecision: (sourcePath: string, action: DedupAction) => void;
   setDragOver: (over: boolean) => void;
   setPendingDropPaths: (paths: string[] | null) => void;
+  setUpdateAvailable: (info: UpdateInfo | null) => void;
+  setUpdateChecking: (checking: boolean) => void;
+  setUpdateDownloading: (downloading: boolean) => void;
 }
 
 export const useUiStore = create<UiState & UiActions>()((set) => ({
@@ -63,6 +74,9 @@ export const useUiStore = create<UiState & UiActions>()((set) => ({
   dedupSourcePath: null,
   isDragOver: false,
   pendingDropPaths: null,
+  updateAvailable: null,
+  updateChecking: false,
+  updateDownloading: false,
 
   openViewer: (itemId) =>
     set({ viewerOpen: true, viewerItemId: itemId }),
@@ -118,4 +132,10 @@ export const useUiStore = create<UiState & UiActions>()((set) => ({
   setDragOver: (over) => set({ isDragOver: over }),
 
   setPendingDropPaths: (paths) => set({ pendingDropPaths: paths }),
+
+  setUpdateAvailable: (info) => set({ updateAvailable: info }),
+
+  setUpdateChecking: (checking) => set({ updateChecking: checking }),
+
+  setUpdateDownloading: (downloading) => set({ updateDownloading: downloading }),
 }));
