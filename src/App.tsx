@@ -16,6 +16,7 @@ import { ImportProgress } from '@/components/Import/ImportProgress';
 import { DropOverlay } from '@/components/Import/DropOverlay';
 import { DedupDialog } from '@/components/Import/DedupDialog';
 import { Inspector } from '@/components/Inspector/Inspector';
+import { checkForUpdates, runUpdate } from '@/lib/updater';
 import type { ImportPrepResult, ImportResult } from '@/lib/types';
 
 const handleDropImport = async (paths: string[]) => {
@@ -66,6 +67,14 @@ function App() {
   const sidebarOpen = useViewStore((s) => s.sidebarOpen);
   const inspectorOpen = useViewStore((s) => s.inspectorOpen);
   const { error, setError } = useUiStore();
+  const updateAvailable = useUiStore((s) => s.updateAvailable);
+  const updateDownloading = useUiStore((s) => s.updateDownloading);
+  const setUpdateAvailable = useUiStore((s) => s.setUpdateAvailable);
+
+  // Silently check for updates once on startup; only surfaces if one is found.
+  useEffect(() => {
+    checkForUpdates(true);
+  }, []);
 
   useEffect(() => {
     const unlisten = getCurrentWindow().onDragDropEvent((event) => {
@@ -152,6 +161,31 @@ function App() {
         <div className="fixed top-4 right-4 z-50 bg-[#FF3B30] text-white px-4 py-2 rounded-lg shadow-lg text-[13px]">
           {error}
           <button onClick={() => setError(null)} className="ml-2 underline">Dismiss</button>
+        </div>
+      )}
+      {updateAvailable && (
+        <div
+          className={`fixed right-4 z-50 flex items-center gap-3 bg-white border border-gray-200 rounded-lg shadow-lg px-4 py-2.5 text-[13px] ${
+            error ? 'top-16' : 'top-4'
+          }`}
+        >
+          <span className="text-[#333333]">
+            新版本 <span className="font-semibold text-[#1D1D1F]">{updateAvailable.version}</span> 可用
+          </span>
+          <button
+            onClick={() => runUpdate()}
+            disabled={updateDownloading}
+            className="bg-[#0063E1] text-white rounded-md px-3 py-1 text-[13px] font-medium hover:bg-[#0052CC] active:bg-[#003FA3] disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-150"
+          >
+            {updateDownloading ? '更新中…' : '更新'}
+          </button>
+          <button
+            onClick={() => setUpdateAvailable(null)}
+            disabled={updateDownloading}
+            className="text-[#666666] rounded-md px-2 py-1 text-[13px] font-medium hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-150"
+          >
+            稍后
+          </button>
         </div>
       )}
       <Toolbar />
