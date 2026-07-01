@@ -397,6 +397,19 @@ pub fn query_items(
     with_library_conn(&state, |conn| db::query_items(conn, &filter, &sort, &page))
 }
 
+/// Return every item id matching `filter` (unpaginated), for "select all"
+/// across the whole result set rather than just the loaded page.
+#[tauri::command]
+pub fn query_item_ids(
+    library_id: String,
+    filter: ItemFilter,
+    sort: SortSpec,
+    state: State<'_, DbState>,
+) -> Result<Vec<String>, AppError> {
+    let _ = library_id;
+    with_library_conn(&state, |conn| db::query_item_ids(conn, &filter, &sort))
+}
+
 #[tauri::command]
 pub fn get_item_detail(item_id: String, state: State<'_, DbState>) -> Result<Item, AppError> {
     with_library_conn(&state, |conn| db::get_item(conn, &item_id))

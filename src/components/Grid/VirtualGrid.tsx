@@ -18,7 +18,7 @@ export function VirtualGrid() {
   const openViewer = useUiStore((s) => s.openViewer);
   const activeLibraryId = useLibraryStore((s) => s.activeLibraryId);
   const activeView = useFilterStore((s) => s.activeView);
-  const { folders, addItems, create: createFolder } = useFolderStore();
+  const { folders, addItems, create: createFolder, nextDefaultFolderName } = useFolderStore();
   const [columnCount, setColumnCount] = useState(4);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; itemId: string } | null>(null);
   const [folderSubmenuOpen, setFolderSubmenuOpen] = useState(false);
@@ -119,8 +119,7 @@ export function VirtualGrid() {
   };
 
   const handleCreateAndAdd = async () => {
-    const name = `New Folder ${folders.length + 1}`;
-    const folder = await createFolder(name);
+    const folder = await createFolder(nextDefaultFolderName());
     const ids = contextMenu
       ? (selectedIds.size > 0 ? Array.from(selectedIds) : [contextMenu.itemId])
       : [];

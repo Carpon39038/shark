@@ -26,7 +26,7 @@ export function SelectionBar() {
   const addTags = useItemStore((s) => s.addTags);
   const removeTags = useItemStore((s) => s.removeTags);
   const setRating = useItemStore((s) => s.setRating);
-  const { folders, addItems, create: createFolder } = useFolderStore();
+  const { folders, addItems, create: createFolder, nextDefaultFolderName } = useFolderStore();
 
   const [popover, setPopover] = useState<Popover>(null);
   const [tagInput, setTagInput] = useState('');
@@ -61,8 +61,7 @@ export function SelectionBar() {
   };
 
   const handleCreateAndAdd = async () => {
-    const name = `New Folder ${folders.length + 1}`;
-    const folder = await createFolder(name);
+    const folder = await createFolder(nextDefaultFolderName());
     await addItems(folder.id, ids());
     setPopover(null);
   };

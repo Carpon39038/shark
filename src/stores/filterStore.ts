@@ -29,8 +29,14 @@ interface FilterActions {
   /** Select one of the special views (All / Uncategorized / Untagged / Trash). */
   selectSpecialView: (view: SpecialView) => void;
   resetFilters: () => void;
-  /** Build the ItemFilter for the current activeView. */
+  /** Build the ItemFilter for the current activeView (view membership only). */
   buildItemFilter: () => ItemFilter;
+  /**
+   * Build the complete ItemFilter for the active view, including the
+   * cross-view refinements (tag, rating floor, file types). This is what
+   * actually populates the grid, so it's what any reload must reproduce.
+   */
+  buildFullItemFilter: () => ItemFilter;
 }
 
 const initialState: FilterState = {
@@ -87,6 +93,16 @@ export const useFilterStore = create<FilterState & FilterActions>()(
           default:
             return {};
         }
+      },
+
+      buildFullItemFilter: () => {
+        const { fileTypes, ratingMin, selectedTag } = get();
+        return {
+          ...get().buildItemFilter(),
+          ...(fileTypes.length > 0 && { file_types: fileTypes }),
+          ...(ratingMin != null && { rating_min: ratingMin }),
+          ...(selectedTag && { tag: selectedTag }),
+        };
       },
     }),
     {

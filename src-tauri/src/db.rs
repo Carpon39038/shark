@@ -437,6 +437,40 @@ pub fn query_items(
     })
 }
 
+/// Return the ids of every item matching `filter`, in the same order
+/// `query_items` would return them (but unpaginated). Used to drive
+/// "select all" over the whole result set rather than the loaded page.
+pub fn query_item_ids(
+    conn: &Connection,
+    filter: &ItemFilter,
+    sort: &SortSpec,
+) -> Result<Vec<String>, AppError> {
+    let fp = build_filter_params(filter);
+
+    let allowed_sort_fields = ["created_at", "modified_at", "file_name", "file_size", "rating"];
+    let sort_field = if allowed_sort_fields.contains(&sort.field.as_str()) {
+        &sort.field
+    } else {
+        "created_at"
+    };
+    let sort_dir = match sort.direction {
+        SortDirection::Asc => "ASC",
+        SortDirection::Desc => "DESC",
+    };
+
+    let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+        fp.param_values.iter().map(|p| p.as_ref()).collect();
+    let sql = format!(
+        "SELECT id FROM items {} ORDER BY {} {}",
+        fp.where_sql, sort_field, sort_dir
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let ids = stmt
+        .query_map(params_refs.as_slice(), |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(ids)
+}
+
 pub fn delete_items(conn: &Connection, ids: &[String], permanent: bool) -> Result<(), AppError> {
     if ids.is_empty() {
         return Ok(());
@@ -1237,6 +1271,47 @@ mod tests {
         assert_eq!(removed, 1);
         assert!(get_item(&conn, "d").is_err());
         assert_eq!(query_items(&conn, &ItemFilter::default(), &sort_desc(), &page_all()).unwrap().total, 3);
+    }
+
+    #[test]
+    fn test_query_item_ids_unpaginated_and_filtered() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        // 150 items > a single 100-row page; odd ids are tagged "keep".
+        for i in 1..=150 {
+            let mut item = make_test_item(&format!("id-{i:03}"), &i.to_string());
+            item.file_name = format!("f{i:03}.png"); // stable file_name sort
+            if i % 2 == 1 {
+                item.tags = "keep".to_string();
+            }
+            insert_item(&conn, &item).unwrap();
+        }
+
+        // No filter: every id, not just the loaded page.
+        let all = query_item_ids(&conn, &ItemFilter::default(), &sort_desc()).unwrap();
+        assert_eq!(all.len(), 150);
+
+        // Tag filter: only the 75 tagged items.
+        let tagged = query_item_ids(
+            &conn,
+            &ItemFilter { tag: Some("keep".to_string()), ..Default::default() },
+            &sort_desc(),
+        )
+        .unwrap();
+        assert_eq!(tagged.len(), 75);
+        assert!(tagged.iter().all(|id| {
+            let n: u32 = id.trim_start_matches("id-").parse().unwrap();
+            n % 2 == 1
+        }));
+
+        // Order matches query_items for the same sort (ascending file_name).
+        let sort_asc = SortSpec { field: "file_name".to_string(), direction: SortDirection::Asc };
+        let ids = query_item_ids(&conn, &ItemFilter::default(), &sort_asc).unwrap();
+        let page = query_items(&conn, &ItemFilter::default(), &sort_asc, &page_all()).unwrap();
+        let page_ids: Vec<String> = page.items.iter().map(|i| i.id.clone()).collect();
+        assert_eq!(&ids[..page_ids.len()], page_ids.as_slice());
     }
 
     #[test]

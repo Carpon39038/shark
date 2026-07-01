@@ -38,6 +38,7 @@ pub fn run() {
             commands::import_from_paths,
             commands::import_commit_paths,
             commands::query_items,
+            commands::query_item_ids,
             commands::get_item_detail,
             commands::delete_items,
             commands::restore_items,

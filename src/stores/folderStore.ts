@@ -18,6 +18,11 @@ interface FolderActions {
   addItems: (folderId: string, itemIds: string[]) => Promise<void>;
   removeItems: (folderId: string, itemIds: string[]) => Promise<void>;
   getItemCount: (folderId: string) => number;
+  /**
+   * Default name for a new folder: the lowest "New Folder N" (N >= 1) not
+   * already taken. Unlike `length + 1`, this never collides after a delete.
+   */
+  nextDefaultFolderName: () => string;
 }
 
 export const useFolderStore = create<FolderState & FolderActions>()(
@@ -78,6 +83,13 @@ export const useFolderStore = create<FolderState & FolderActions>()(
 
     getItemCount: (folderId: string) => {
       return get().itemCounts[folderId] ?? 0;
+    },
+
+    nextDefaultFolderName: () => {
+      const taken = new Set(get().folders.map((f) => f.name));
+      let n = 1;
+      while (taken.has(`New Folder ${n}`)) n += 1;
+      return `New Folder ${n}`;
     },
   }),
 );
