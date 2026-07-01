@@ -4,6 +4,14 @@ name: Release
 # Tag with e.g. `v0.1.0` (must start with `v`). Produces a *draft* GitHub
 # Release carrying macOS (Apple Silicon + Intel) and Windows artifacts plus the
 # updater `latest.json` manifest that the in-app updater points at.
+#
+# IMPORTANT — the draft must be PUBLISHED for auto-update to work. The updater
+# endpoint is `…/releases/latest/download/latest.json`, and `/releases/latest/`
+# only resolves the latest *published* (non-draft, non-prerelease) release. While
+# the release stays a draft, that URL 404s and the in-app check finds nothing.
+# So after this workflow finishes, review the draft and click "Publish release".
+# Publishing is also the moment to confirm `latest.json` lists all platforms
+# (see the `max-parallel` note below).
 on:
   push:
     tags:
@@ -17,6 +25,14 @@ jobs:
   release:
     strategy:
       fail-fast: false
+      # Run the three platform jobs one at a time. tauri-action builds the
+      # updater `latest.json` by reading the manifest already on the release and
+      # merging in the current job's platform entry. That read-modify-write is
+      # not atomic: run the jobs concurrently and two can read the same manifest
+      # before either writes, so the later writer drops the earlier platform.
+      # Serializing guarantees each job sees the previous job's entry, so the
+      # final `latest.json` carries all three platforms.
+      max-parallel: 1
       matrix:
         include:
           # Apple Silicon

@@ -1,6 +1,6 @@
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
-import { ask } from '@tauri-apps/plugin-dialog';
+import { ask, message } from '@tauri-apps/plugin-dialog';
 import { useUiStore } from '@/stores/uiStore';
 
 /**
@@ -26,7 +26,9 @@ export async function checkForUpdates(silent = false): Promise<void> {
     } else {
       useUiStore.getState().setUpdateAvailable(null);
       if (!silent) {
-        await ask('当前已是最新版本。', { title: '检查更新', kind: 'info' });
+        // Purely informational — use message() (OK only) rather than ask(),
+        // which would render a needless Cancel button.
+        await message('当前已是最新版本。', { title: '检查更新', kind: 'info' });
       }
     }
   } catch (err) {
@@ -44,8 +46,10 @@ export async function checkForUpdates(silent = false): Promise<void> {
  * Download and install the pending update, then offer to relaunch.
  *
  * Re-runs `check()` to obtain a live Update handle (the store only holds
- * serializable metadata), streams the download while reporting progress via
- * `updateDownloading`, and prompts the user to restart on completion.
+ * serializable metadata), downloads and installs the update while
+ * `updateDownloading` keeps the UI in a busy state, and prompts the user to
+ * restart on completion. Download progress is not surfaced yet — `updateDownloading`
+ * is a plain busy flag, so the banner shows an indeterminate "更新中…" until done.
  */
 export async function runUpdate(): Promise<void> {
   const ui = useUiStore.getState();
