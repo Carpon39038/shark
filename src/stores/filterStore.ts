@@ -32,7 +32,11 @@ interface FilterActions {
   /** Select one of the special views (All / Uncategorized / Untagged / Trash). */
   selectSpecialView: (view: SpecialView) => void;
   resetFilters: () => void;
-  /** Build the ItemFilter for the current activeView. */
+  /**
+   * Build the complete ItemFilter for the current view — the view dimension
+   * plus the secondary filters (tag, color, rating floor, file types). This is
+   * what populates the grid, so it's what any reload must reproduce.
+   */
   buildItemFilter: () => ItemFilter;
 }
 

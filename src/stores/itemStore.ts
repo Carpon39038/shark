@@ -17,6 +17,12 @@ interface ItemActions {
   addItem: (item: Item, thumbnailPath?: string) => void;
   toggleSelect: (id: string) => void;
   selectRange: (fromId: string, toId: string, append?: boolean) => void;
+  /**
+   * Select every item in the active view — the whole result set, not just the
+   * loaded page. Falls back to the loaded page if the id query fails.
+   */
+  selectAll: () => Promise<void>;
+  invertSelection: () => void;
   clearSelection: () => void;
   setLoading: (loading: boolean) => void;
   loadItems: (
@@ -24,23 +30,34 @@ interface ItemActions {
     filter: ItemFilter,
     sort: SortSpec,
     page: Pagination,
+    preserveSelection?: boolean,
   ) => Promise<void>;
   loadSmartFolderItems: (
     libraryId: string,
     smartFolderId: string,
     sort: SortSpec,
     page: Pagination,
+    preserveSelection?: boolean,
   ) => Promise<void>;
   loadThumbnails: (itemIds: string[]) => Promise<void>;
   updateItem: (id: string, updates: { tags?: string; rating?: number; notes?: string }) => Promise<Item | null>;
-  /** Reload the main grid for whatever view is currently active in filterStore. */
-  reloadCurrentView: (libraryId: string) => Promise<void>;
+  /**
+   * Reload the main grid for whatever view is currently active in filterStore.
+   * With preserveSelection, selected ids that survive the reload stay selected.
+   */
+  reloadCurrentView: (libraryId: string, preserveSelection?: boolean) => Promise<void>;
   /** Soft-delete (to Trash) or, with permanent=true, hard-delete the given items. */
   deleteItems: (libraryId: string, ids: string[], permanent: boolean) => Promise<void>;
   /** Restore items from Trash back to active. */
   restoreItems: (libraryId: string, ids: string[]) => Promise<void>;
   /** Permanently remove every item in Trash. */
   emptyTrash: (libraryId: string) => Promise<void>;
+  /** Add the given tags to every item in ids. */
+  addTags: (libraryId: string, ids: string[], tags: string[]) => Promise<void>;
+  /** Remove the given tags from every item in ids. */
+  removeTags: (libraryId: string, ids: string[], tags: string[]) => Promise<void>;
+  /** Set the rating (0-5) on every item in ids. */
+  setRating: (libraryId: string, ids: string[], rating: number) => Promise<void>;
 }
 
 export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
@@ -94,12 +111,51 @@ export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
     }
   },
 
+  selectAll: async () => {
+    const filter = useFilterStore.getState();
+    const sort: SortSpec = { field: filter.sortBy, direction: filter.sortOrder };
+    const { activeLibraryId } = await import('./libraryStore').then((m) => m.useLibraryStore.getState());
+    try {
+      let ids: string[];
+      if (filter.smartFolderId) {
+        // Smart folders have no dedicated id-only query; pull a large page.
+        const result = await invoke<ItemPage>('query_smart_folder_items', {
+          id: filter.smartFolderId,
+          sort,
+          page: { page: 0, page_size: 100_000 } as Pagination,
+        });
+        ids = result.items.map((i) => i.id);
+      } else {
+        ids = await invoke<string[]>('query_item_ids', {
+          libraryId: activeLibraryId ?? '',
+          filter: filter.buildItemFilter(),
+          sort,
+        });
+      }
+      set({ selectedIds: new Set(ids) });
+    } catch (e) {
+      console.error('Failed to select all:', e);
+      // Fall back to the loaded page so the action still does something.
+      set((state) => ({ selectedIds: new Set(state.items.map((i) => i.id)) }));
+    }
+  },
+
+  invertSelection: () =>
+    set((state) => {
+      const next = new Set<string>();
+      for (const item of state.items) {
+        if (!state.selectedIds.has(item.id)) next.add(item.id);
+      }
+      return { selectedIds: next };
+    }),
+
   clearSelection: () => set({ selectedIds: new Set<string>() }),
 
   setLoading: (loading) => set({ loading }),
 
-  loadItems: async (libraryId, filter, sort, page) => {
+  loadItems: async (libraryId, filter, sort, page, preserveSelection = false) => {
     set({ loading: true });
+    const prevSelected = get().selectedIds;
     try {
       const result = await invoke<ItemPage>('query_items', {
         libraryId,
@@ -107,13 +163,15 @@ export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
         sort,
         page,
       });
+      const ids = result.items.map((i) => i.id);
       set({
         items: result.items,
         total: result.total,
-        selectedIds: new Set<string>(),
+        selectedIds: preserveSelection
+          ? new Set(ids.filter((id) => prevSelected.has(id)))
+          : new Set<string>(),
       });
       // Load thumbnails for the new items
-      const ids = result.items.map((i) => i.id);
       if (ids.length > 0) {
         get().loadThumbnails(ids);
       }
@@ -125,20 +183,23 @@ export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
     }
   },
 
-  loadSmartFolderItems: async (_libraryId, smartFolderId, sort, page) => {
+  loadSmartFolderItems: async (_libraryId, smartFolderId, sort, page, preserveSelection = false) => {
     set({ loading: true });
+    const prevSelected = get().selectedIds;
     try {
       const result = await invoke<ItemPage>('query_smart_folder_items', {
         id: smartFolderId,
         sort,
         page,
       });
+      const ids = result.items.map((i) => i.id);
       set({
         items: result.items,
         total: result.total,
-        selectedIds: new Set<string>(),
+        selectedIds: preserveSelection
+          ? new Set(ids.filter((id) => prevSelected.has(id)))
+          : new Set<string>(),
       });
-      const ids = result.items.map((i) => i.id);
       if (ids.length > 0) {
         get().loadThumbnails(ids);
       }
@@ -183,14 +244,14 @@ export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
     }
   },
 
-  reloadCurrentView: async (libraryId) => {
+  reloadCurrentView: async (libraryId, preserveSelection = false) => {
     const filter = useFilterStore.getState();
     const sort: SortSpec = { field: filter.sortBy, direction: filter.sortOrder };
     const page: Pagination = { page: 0, page_size: 100 };
     if (filter.smartFolderId) {
-      await get().loadSmartFolderItems(libraryId, filter.smartFolderId, sort, page);
+      await get().loadSmartFolderItems(libraryId, filter.smartFolderId, sort, page, preserveSelection);
     } else {
-      await get().loadItems(libraryId, filter.buildItemFilter(), sort, page);
+      await get().loadItems(libraryId, filter.buildItemFilter(), sort, page, preserveSelection);
     }
   },
 
@@ -222,6 +283,42 @@ export const useItemStore = create<ItemState & ItemActions>()((set, get) => ({
       await get().reloadCurrentView(libraryId);
     } catch (e) {
       console.error('Failed to empty trash:', e);
+      useUiStore.getState().setError(String(e));
+    }
+  },
+
+  addTags: async (libraryId, ids, tags) => {
+    if (ids.length === 0 || tags.length === 0) return;
+    try {
+      await invoke('add_tags_to_items', { itemIds: ids, tags });
+      // Reload rather than patch in place: in a tag/rating-filtered or Untagged
+      // view the mutated items may no longer match, so patching would leave
+      // stale rows on screen. preserveSelection keeps whatever still matches.
+      await get().reloadCurrentView(libraryId, true);
+    } catch (e) {
+      console.error('Failed to add tags:', e);
+      useUiStore.getState().setError(String(e));
+    }
+  },
+
+  removeTags: async (libraryId, ids, tags) => {
+    if (ids.length === 0 || tags.length === 0) return;
+    try {
+      await invoke('remove_tags_from_items', { itemIds: ids, tags });
+      await get().reloadCurrentView(libraryId, true);
+    } catch (e) {
+      console.error('Failed to remove tags:', e);
+      useUiStore.getState().setError(String(e));
+    }
+  },
+
+  setRating: async (libraryId, ids, rating) => {
+    if (ids.length === 0) return;
+    try {
+      await invoke('set_items_rating', { itemIds: ids, rating });
+      await get().reloadCurrentView(libraryId, true);
+    } catch (e) {
+      console.error('Failed to set rating:', e);
       useUiStore.getState().setError(String(e));
     }
   },

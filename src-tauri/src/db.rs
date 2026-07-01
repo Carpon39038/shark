@@ -458,6 +458,40 @@ pub fn query_items(
     })
 }
 
+/// Return the ids of every item matching `filter`, in the same order
+/// `query_items` would return them (but unpaginated). Used to drive
+/// "select all" over the whole result set rather than the loaded page.
+pub fn query_item_ids(
+    conn: &Connection,
+    filter: &ItemFilter,
+    sort: &SortSpec,
+) -> Result<Vec<String>, AppError> {
+    let fp = build_filter_params(filter);
+
+    let allowed_sort_fields = ["created_at", "modified_at", "file_name", "file_size", "rating"];
+    let sort_field = if allowed_sort_fields.contains(&sort.field.as_str()) {
+        &sort.field
+    } else {
+        "created_at"
+    };
+    let sort_dir = match sort.direction {
+        SortDirection::Asc => "ASC",
+        SortDirection::Desc => "DESC",
+    };
+
+    let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+        fp.param_values.iter().map(|p| p.as_ref()).collect();
+    let sql = format!(
+        "SELECT id FROM items {} ORDER BY {} {}",
+        fp.where_sql, sort_field, sort_dir
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let ids = stmt
+        .query_map(params_refs.as_slice(), |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(ids)
+}
+
 pub fn delete_items(conn: &Connection, ids: &[String], permanent: bool) -> Result<(), AppError> {
     if ids.is_empty() {
         return Ok(());
@@ -624,6 +658,88 @@ pub fn remove_items_from_folder(conn: &Connection, folder_id: &str, item_ids: &[
             params![item_id, folder_id],
         )?;
     }
+    Ok(())
+}
+
+/// Split a comma-separated tag string into trimmed, non-empty tags.
+fn parse_tags(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(|t| t.trim())
+        .filter(|t| !t.is_empty())
+        .map(|t| t.to_string())
+        .collect()
+}
+
+/// Add each of `tags` to every item in `ids`, preserving existing order and
+/// skipping duplicates. Tags are stored as a comma-separated string.
+pub fn add_tags_to_items(conn: &Connection, ids: &[String], tags: &[String]) -> Result<(), AppError> {
+    if ids.is_empty() || tags.is_empty() {
+        return Ok(());
+    }
+    let tx = conn.unchecked_transaction()?;
+    for id in ids {
+        let current: String = tx.query_row(
+            "SELECT tags FROM items WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        let mut list = parse_tags(&current);
+        for tag in tags {
+            if !list.iter().any(|t| t == tag) {
+                list.push(tag.clone());
+            }
+        }
+        tx.execute(
+            "UPDATE items SET tags = ?1, modified_at = datetime('now') WHERE id = ?2",
+            params![list.join(","), id],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Remove each of `tags` from every item in `ids`. Items without the tag are
+/// left unchanged.
+pub fn remove_tags_from_items(conn: &Connection, ids: &[String], tags: &[String]) -> Result<(), AppError> {
+    if ids.is_empty() || tags.is_empty() {
+        return Ok(());
+    }
+    let tx = conn.unchecked_transaction()?;
+    for id in ids {
+        let current: String = tx.query_row(
+            "SELECT tags FROM items WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        let list: Vec<String> = parse_tags(&current)
+            .into_iter()
+            .filter(|t| !tags.iter().any(|r| r == t))
+            .collect();
+        tx.execute(
+            "UPDATE items SET tags = ?1, modified_at = datetime('now') WHERE id = ?2",
+            params![list.join(","), id],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Set the rating (0-5) on every item in `ids`.
+pub fn set_items_rating(conn: &Connection, ids: &[String], rating: i64) -> Result<(), AppError> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    let placeholders: Vec<String> = (2..=ids.len() + 1).map(|i| format!("?{i}")).collect();
+    let sql = format!(
+        "UPDATE items SET rating = ?1, modified_at = datetime('now') WHERE id IN ({})",
+        placeholders.join(", ")
+    );
+    let mut params: Vec<&dyn rusqlite::types::ToSql> = Vec::with_capacity(ids.len() + 1);
+    params.push(&rating);
+    for id in ids {
+        params.push(id as &dyn rusqlite::types::ToSql);
+    }
+    conn.execute(&sql, params.as_slice())?;
     Ok(())
 }
 
@@ -1038,6 +1154,68 @@ mod tests {
         assert!(get_item(&conn, "id-del").is_err());
     }
 
+    #[test]
+    fn test_add_tags_to_items_dedups_and_preserves() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        let mut a = make_test_item("a", "a");
+        a.tags = "red,blue".to_string();
+        insert_item(&conn, &a).unwrap();
+        let b = make_test_item("b", "b"); // no tags
+        insert_item(&conn, &b).unwrap();
+
+        add_tags_to_items(
+            &conn,
+            &["a".to_string(), "b".to_string()],
+            &["blue".to_string(), "green".to_string()],
+        )
+        .unwrap();
+
+        // "blue" already present on a → not duplicated; order preserved.
+        assert_eq!(get_item(&conn, "a").unwrap().tags, "red,blue,green");
+        assert_eq!(get_item(&conn, "b").unwrap().tags, "blue,green");
+    }
+
+    #[test]
+    fn test_remove_tags_from_items() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        let mut a = make_test_item("a", "a");
+        a.tags = "red,blue,green".to_string();
+        insert_item(&conn, &a).unwrap();
+
+        remove_tags_from_items(&conn, &["a".to_string()], &["blue".to_string()]).unwrap();
+        assert_eq!(get_item(&conn, "a").unwrap().tags, "red,green");
+
+        // Removing a tag that isn't present leaves the item unchanged.
+        remove_tags_from_items(&conn, &["a".to_string()], &["yellow".to_string()]).unwrap();
+        assert_eq!(get_item(&conn, "a").unwrap().tags, "red,green");
+    }
+
+    #[test]
+    fn test_set_items_rating() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        for id in ["a", "b", "c"] {
+            insert_item(&conn, &make_test_item(id, id)).unwrap();
+        }
+
+        set_items_rating(&conn, &["a".to_string(), "c".to_string()], 4).unwrap();
+        assert_eq!(get_item(&conn, "a").unwrap().rating, 4);
+        assert_eq!(get_item(&conn, "b").unwrap().rating, 0); // untouched
+        assert_eq!(get_item(&conn, "c").unwrap().rating, 4);
+
+        // Clearing the rating works too.
+        set_items_rating(&conn, &["a".to_string()], 0).unwrap();
+        assert_eq!(get_item(&conn, "a").unwrap().rating, 0);
+    }
+
     fn sort_desc() -> SortSpec {
         SortSpec { field: "created_at".to_string(), direction: SortDirection::Desc }
     }
@@ -1116,6 +1294,47 @@ mod tests {
         assert_eq!(removed, 1);
         assert!(get_item(&conn, "d").is_err());
         assert_eq!(query_items(&conn, &ItemFilter::default(), &sort_desc(), &page_all()).unwrap().total, 3);
+    }
+
+    #[test]
+    fn test_query_item_ids_unpaginated_and_filtered() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        // 150 items > a single 100-row page; odd ids are tagged "keep".
+        for i in 1..=150 {
+            let mut item = make_test_item(&format!("id-{i:03}"), &i.to_string());
+            item.file_name = format!("f{i:03}.png"); // stable file_name sort
+            if i % 2 == 1 {
+                item.tags = "keep".to_string();
+            }
+            insert_item(&conn, &item).unwrap();
+        }
+
+        // No filter: every id, not just the loaded page.
+        let all = query_item_ids(&conn, &ItemFilter::default(), &sort_desc()).unwrap();
+        assert_eq!(all.len(), 150);
+
+        // Tag filter: only the 75 tagged items.
+        let tagged = query_item_ids(
+            &conn,
+            &ItemFilter { tag: Some("keep".to_string()), ..Default::default() },
+            &sort_desc(),
+        )
+        .unwrap();
+        assert_eq!(tagged.len(), 75);
+        assert!(tagged.iter().all(|id| {
+            let n: u32 = id.trim_start_matches("id-").parse().unwrap();
+            n % 2 == 1
+        }));
+
+        // Order matches query_items for the same sort (ascending file_name).
+        let sort_asc = SortSpec { field: "file_name".to_string(), direction: SortDirection::Asc };
+        let ids = query_item_ids(&conn, &ItemFilter::default(), &sort_asc).unwrap();
+        let page = query_items(&conn, &ItemFilter::default(), &sort_asc, &page_all()).unwrap();
+        let page_ids: Vec<String> = page.items.iter().map(|i| i.id.clone()).collect();
+        assert_eq!(&ids[..page_ids.len()], page_ids.as_slice());
     }
 
     #[test]

@@ -403,6 +403,19 @@ pub fn query_items(
     with_library_conn(&state, |conn| db::query_items(conn, &filter, &sort, &page))
 }
 
+/// Return every item id matching `filter` (unpaginated), for "select all"
+/// across the whole result set rather than just the loaded page.
+#[tauri::command]
+pub fn query_item_ids(
+    library_id: String,
+    filter: ItemFilter,
+    sort: SortSpec,
+    state: State<'_, DbState>,
+) -> Result<Vec<String>, AppError> {
+    let _ = library_id;
+    with_library_conn(&state, |conn| db::query_item_ids(conn, &filter, &sort))
+}
+
 #[tauri::command]
 pub fn get_item_detail(item_id: String, state: State<'_, DbState>) -> Result<Item, AppError> {
     with_library_conn(&state, |conn| db::get_item(conn, &item_id))
@@ -671,4 +684,31 @@ pub fn remove_items_from_folder(
     with_library_conn(&state, |conn| {
         db::remove_items_from_folder(conn, &folder_id, &item_ids)
     })
+}
+
+#[tauri::command]
+pub fn add_tags_to_items(
+    item_ids: Vec<String>,
+    tags: Vec<String>,
+    state: State<'_, DbState>,
+) -> Result<(), AppError> {
+    with_library_conn(&state, |conn| db::add_tags_to_items(conn, &item_ids, &tags))
+}
+
+#[tauri::command]
+pub fn remove_tags_from_items(
+    item_ids: Vec<String>,
+    tags: Vec<String>,
+    state: State<'_, DbState>,
+) -> Result<(), AppError> {
+    with_library_conn(&state, |conn| db::remove_tags_from_items(conn, &item_ids, &tags))
+}
+
+#[tauri::command]
+pub fn set_items_rating(
+    item_ids: Vec<String>,
+    rating: i64,
+    state: State<'_, DbState>,
+) -> Result<(), AppError> {
+    with_library_conn(&state, |conn| db::set_items_rating(conn, &item_ids, rating))
 }

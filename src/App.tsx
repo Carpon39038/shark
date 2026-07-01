@@ -3,12 +3,14 @@ import { useViewStore } from '@/stores/viewStore';
 import { useUiStore } from '@/stores/uiStore';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { useItemStore } from '@/stores/itemStore';
+import { useFilterStore } from '@/stores/filterStore';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Toolbar } from '@/components/Toolbar/Toolbar';
 import { Sidebar } from '@/components/Sidebar/Sidebar';
 import { VirtualGrid } from '@/components/Grid/VirtualGrid';
 import { TrashBar } from '@/components/Grid/TrashBar';
+import { SelectionBar } from '@/components/Grid/SelectionBar';
 import { ImageViewer } from '@/components/Viewer/ImageViewer';
 import { ImportProgress } from '@/components/Import/ImportProgress';
 import { DropOverlay } from '@/components/Import/DropOverlay';
@@ -91,6 +93,59 @@ function App() {
     };
   }, []);
 
+  // Global keyboard shortcuts for selection / batch delete.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Ignore while typing in a field or when a modal/viewer is open.
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const ui = useUiStore.getState();
+      if (ui.viewerOpen || ui.dedupActive) return;
+
+      const item = useItemStore.getState();
+      const filter = useFilterStore.getState();
+      const activeLibraryId = useLibraryStore.getState().activeLibraryId;
+
+      // Cmd/Ctrl+A → select all in the current view.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
+        if (item.items.length > 0) {
+          e.preventDefault();
+          item.selectAll();
+        }
+        return;
+      }
+
+      // Esc → clear selection.
+      if (e.key === 'Escape') {
+        if (item.selectedIds.size > 0) {
+          e.preventDefault();
+          item.clearSelection();
+        }
+        return;
+      }
+
+      // Delete / Backspace → move selection to Trash (active views only).
+      if (
+        (e.key === 'Delete' || e.key === 'Backspace') &&
+        item.selectedIds.size > 0 &&
+        activeLibraryId &&
+        filter.activeView !== 'trash'
+      ) {
+        e.preventDefault();
+        item.deleteItems(activeLibraryId, Array.from(item.selectedIds), false);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   return (
     <div className="h-screen w-screen flex flex-col bg-white text-[#333333] font-sans overflow-hidden select-none">
       {error && (
@@ -104,6 +159,7 @@ function App() {
         {sidebarOpen && <Sidebar />}
         <div className="flex flex-1 flex-col overflow-hidden">
           <TrashBar />
+          <SelectionBar />
           <VirtualGrid />
         </div>
         {inspectorOpen && <Inspector />}
