@@ -218,3 +218,14 @@ pub struct FolderCount {
     pub folder_id: String,
     pub count: i64,
 }
+
+/// Auto-import (watched folder) configuration for a single library.
+/// Persisted in the per-library `app_config` table.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoImportConfig {
+    /// Absolute path of the folder to watch, or None if never set.
+    pub path: Option<String>,
+    /// Whether watching is currently active.
+    pub enabled: bool,
+}

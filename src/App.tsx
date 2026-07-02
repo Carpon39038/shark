@@ -5,6 +5,7 @@ import { useLibraryStore } from '@/stores/libraryStore';
 import { useItemStore } from '@/stores/itemStore';
 import { useFilterStore } from '@/stores/filterStore';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Toolbar } from '@/components/Toolbar/Toolbar';
 import { Sidebar } from '@/components/Sidebar/Sidebar';
@@ -16,8 +17,9 @@ import { ImportProgress } from '@/components/Import/ImportProgress';
 import { DropOverlay } from '@/components/Import/DropOverlay';
 import { DedupDialog } from '@/components/Import/DedupDialog';
 import { Inspector } from '@/components/Inspector/Inspector';
+import { SettingsModal } from '@/components/Settings/SettingsModal';
 import { checkForUpdates, runUpdate } from '@/lib/updater';
-import type { ImportPrepResult, ImportResult } from '@/lib/types';
+import type { AutoImportResult, ImportPrepResult, ImportResult } from '@/lib/types';
 
 const handleDropImport = async (paths: string[]) => {
   const { libraries, activeLibraryId } = useLibraryStore.getState();
@@ -70,6 +72,9 @@ function App() {
   const updateAvailable = useUiStore((s) => s.updateAvailable);
   const updateDownloading = useUiStore((s) => s.updateDownloading);
   const setUpdateAvailable = useUiStore((s) => s.setUpdateAvailable);
+  const settingsOpen = useUiStore((s) => s.settingsOpen);
+  const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
+  const toast = useUiStore((s) => s.toast);
 
   // Silently check for updates once on startup; only surfaces if one is found.
   useEffect(() => {
@@ -97,6 +102,30 @@ function App() {
       }
     });
 
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  // Auto-import: a watched folder imported files in the background. Refresh the
+  // grid so they appear, and show a brief notification.
+  useEffect(() => {
+    const unlisten = listen<AutoImportResult>('auto-import', (event) => {
+      const { imported } = event.payload;
+      if (imported <= 0) return;
+      const activeLibraryId = useLibraryStore.getState().activeLibraryId;
+      if (activeLibraryId) {
+        useItemStore.getState().reloadCurrentView(activeLibraryId, true);
+      }
+      const setToast = useUiStore.getState().setToast;
+      setToast(`已自动导入 ${imported} 个文件`);
+      setTimeout(() => {
+        // Only clear if it's still our message (don't stomp a newer toast).
+        if (useUiStore.getState().toast === `已自动导入 ${imported} 个文件`) {
+          setToast(null);
+        }
+      }, 3000);
+    });
     return () => {
       unlisten.then((fn) => fn());
     };
@@ -202,6 +231,12 @@ function App() {
       <ImportProgress />
       <DropOverlay />
       <DedupDialog />
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50 bg-[#1D1D1F] text-white px-4 py-2 rounded-lg shadow-lg text-[13px]">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

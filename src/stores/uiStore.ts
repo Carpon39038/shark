@@ -36,6 +36,9 @@ interface UiState {
   updateAvailable: UpdateInfo | null;
   updateChecking: boolean;
   updateDownloading: boolean;
+  settingsOpen: boolean;
+  /** Transient success/info message (e.g. auto-import notification). */
+  toast: string | null;
 }
 
 interface UiActions {
@@ -56,6 +59,8 @@ interface UiActions {
   setUpdateAvailable: (info: UpdateInfo | null) => void;
   setUpdateChecking: (checking: boolean) => void;
   setUpdateDownloading: (downloading: boolean) => void;
+  setSettingsOpen: (open: boolean) => void;
+  setToast: (msg: string | null) => void;
 }
 
 export const useUiStore = create<UiState & UiActions>()((set) => ({
@@ -77,6 +82,8 @@ export const useUiStore = create<UiState & UiActions>()((set) => ({
   updateAvailable: null,
   updateChecking: false,
   updateDownloading: false,
+  settingsOpen: false,
+  toast: null,
 
   openViewer: (itemId) =>
     set({ viewerOpen: true, viewerItemId: itemId }),
@@ -138,4 +145,8 @@ export const useUiStore = create<UiState & UiActions>()((set) => ({
   setUpdateChecking: (checking) => set({ updateChecking: checking }),
 
   setUpdateDownloading: (downloading) => set({ updateDownloading: downloading }),
+
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
+
+  setToast: (msg) => set({ toast: msg }),
 }));
