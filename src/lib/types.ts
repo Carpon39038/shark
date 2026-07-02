@@ -112,6 +112,20 @@ export interface FolderCount {
   count: number;
 }
 
+/** Auto-import (watched folder) config for the active library. */
+export interface AutoImportConfig {
+  path: string | null;
+  enabled: boolean;
+}
+
+/** Payload of the `auto-import` event emitted after a background import. */
+export interface AutoImportResult {
+  imported: number;
+  skipped: number;
+  duplicates: number;
+  watchedPath: string;
+}
+
 export interface SearchResult {
   item: Item;
   rank: number;

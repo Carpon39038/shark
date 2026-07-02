@@ -2,7 +2,7 @@ use rusqlite::{params, Connection, Row};
 use std::path::Path;
 
 use crate::error::AppError;
-use crate::models::{Folder, FolderCount, Item, ItemFilter, ItemPage, ItemStatus, Library, Pagination, RuleGroup, SmartFolder, SortDirection, SortSpec, TagCount};
+use crate::models::{AutoImportConfig, Folder, FolderCount, Item, ItemFilter, ItemPage, ItemStatus, Library, Pagination, RuleGroup, SmartFolder, SortDirection, SortSpec, TagCount};
 
 pub fn row_to_item(row: &Row) -> Result<Item, rusqlite::Error> {
     let status_str: String = row.get(11)?;
@@ -337,6 +337,73 @@ fn run_library_migrations(conn: &Connection) -> Result<(), AppError> {
         )?;
         conn.pragma_update(None, "user_version", 2)?;
     }
+    if version < 3 {
+        // Generic per-library key-value settings. Backs auto-import config
+        // (`auto_import.path`, `auto_import.enabled`) and any future settings.
+        conn.execute_batch(
+            "CREATE TABLE app_config (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );",
+        )?;
+        conn.pragma_update(None, "user_version", 3)?;
+    }
+    Ok(())
+}
+
+// --- Per-library key-value config ---
+
+pub fn get_config(conn: &Connection, key: &str) -> Result<Option<String>, AppError> {
+    let value = conn
+        .query_row(
+            "SELECT value FROM app_config WHERE key = ?1",
+            params![key],
+            |row| row.get::<_, String>(0),
+        )
+        .ok();
+    Ok(value)
+}
+
+pub fn set_config(conn: &Connection, key: &str, value: &str) -> Result<(), AppError> {
+    conn.execute(
+        "INSERT INTO app_config (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![key, value],
+    )?;
+    Ok(())
+}
+
+pub fn delete_config(conn: &Connection, key: &str) -> Result<(), AppError> {
+    conn.execute("DELETE FROM app_config WHERE key = ?1", params![key])?;
+    Ok(())
+}
+
+const CFG_AUTO_IMPORT_PATH: &str = "auto_import.path";
+const CFG_AUTO_IMPORT_ENABLED: &str = "auto_import.enabled";
+
+/// Read the auto-import config, defaulting to `{ path: None, enabled: false }`.
+pub fn get_auto_import(conn: &Connection) -> Result<AutoImportConfig, AppError> {
+    let path = get_config(conn, CFG_AUTO_IMPORT_PATH)?;
+    let enabled = get_config(conn, CFG_AUTO_IMPORT_ENABLED)?
+        .map(|v| v == "true")
+        .unwrap_or(false);
+    Ok(AutoImportConfig { path, enabled })
+}
+
+/// Persist the watched-folder path.
+pub fn set_auto_import_path(conn: &Connection, path: &str) -> Result<(), AppError> {
+    set_config(conn, CFG_AUTO_IMPORT_PATH, path)
+}
+
+/// Persist the enabled flag.
+pub fn set_auto_import_enabled(conn: &Connection, enabled: bool) -> Result<(), AppError> {
+    set_config(conn, CFG_AUTO_IMPORT_ENABLED, if enabled { "true" } else { "false" })
+}
+
+/// Clear the watched folder entirely (path removed, disabled).
+pub fn clear_auto_import(conn: &Connection) -> Result<(), AppError> {
+    delete_config(conn, CFG_AUTO_IMPORT_PATH)?;
+    set_auto_import_enabled(conn, false)?;
     Ok(())
 }
 
@@ -1093,6 +1160,73 @@ mod tests {
         let _ = init_library_db(&db_path).unwrap(); // run again
     }
 
+    /// A library created by an older build sits at an earlier `user_version`.
+    /// Opening it must migrate forward to v3 (adding `app_config`) without
+    /// touching existing rows. Simulate a v1 DB and confirm the upgrade.
+    #[test]
+    fn test_migration_v1_to_v3_preserves_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+
+        // Build a minimal v1-era schema with one row, stamped user_version = 1.
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            apply_pragmas(&conn).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE items (
+                    id TEXT PRIMARY KEY,
+                    file_path TEXT NOT NULL UNIQUE,
+                    file_name TEXT NOT NULL,
+                    file_size INTEGER NOT NULL,
+                    file_type TEXT NOT NULL,
+                    width INTEGER, height INTEGER,
+                    tags TEXT NOT NULL DEFAULT '',
+                    rating INTEGER NOT NULL DEFAULT 0,
+                    notes TEXT NOT NULL DEFAULT '',
+                    sha256 TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    modified_at TEXT NOT NULL DEFAULT (datetime('now'))
+                );",
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO items (id, file_path, file_name, file_size, file_type, sha256)
+                 VALUES ('old-1', '/lib/images/old.png', 'old.png', 10, 'PNG', 'abc')",
+                [],
+            )
+            .unwrap();
+            conn.pragma_update(None, "user_version", 1).unwrap();
+        }
+
+        // Reopen through the real migration path.
+        let conn = init_library_db(&db_path).unwrap();
+
+        let version: i32 = conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, 3, "should have migrated to v3");
+
+        // New table exists and works.
+        set_config(&conn, "auto_import.enabled", "true").unwrap();
+        assert_eq!(
+            get_config(&conn, "auto_import.enabled").unwrap(),
+            Some("true".to_string())
+        );
+
+        // v2 columns were added.
+        let colors: String = conn
+            .query_row("SELECT colors FROM items WHERE id = 'old-1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(colors, "");
+
+        // Pre-existing row survived untouched.
+        let name: String = conn
+            .query_row("SELECT file_name FROM items WHERE id = 'old-1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(name, "old.png");
+    }
+
     #[test]
     fn test_insert_and_query_item() {
         let dir = tempfile::tempdir().unwrap();
@@ -1520,5 +1654,54 @@ mod tests {
 
         let portrait = counts.iter().find(|tc| tc.tag == "portrait").unwrap();
         assert_eq!(portrait.count, 1);
+    }
+
+    #[test]
+    fn test_config_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        assert_eq!(get_config(&conn, "missing").unwrap(), None);
+
+        set_config(&conn, "k", "v1").unwrap();
+        assert_eq!(get_config(&conn, "k").unwrap(), Some("v1".to_string()));
+
+        // Upsert overwrites.
+        set_config(&conn, "k", "v2").unwrap();
+        assert_eq!(get_config(&conn, "k").unwrap(), Some("v2".to_string()));
+
+        delete_config(&conn, "k").unwrap();
+        assert_eq!(get_config(&conn, "k").unwrap(), None);
+    }
+
+    #[test]
+    fn test_auto_import_config_defaults_and_set() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("metadata.db");
+        let conn = init_library_db(&db_path).unwrap();
+
+        // Defaults: no path, disabled.
+        let cfg = get_auto_import(&conn).unwrap();
+        assert_eq!(cfg.path, None);
+        assert!(!cfg.enabled);
+
+        set_auto_import_path(&conn, "/tmp/watched").unwrap();
+        set_auto_import_enabled(&conn, true).unwrap();
+        let cfg = get_auto_import(&conn).unwrap();
+        assert_eq!(cfg.path, Some("/tmp/watched".to_string()));
+        assert!(cfg.enabled);
+
+        // Disable keeps the path.
+        set_auto_import_enabled(&conn, false).unwrap();
+        let cfg = get_auto_import(&conn).unwrap();
+        assert_eq!(cfg.path, Some("/tmp/watched".to_string()));
+        assert!(!cfg.enabled);
+
+        // Clear removes the path and disables.
+        clear_auto_import(&conn).unwrap();
+        let cfg = get_auto_import(&conn).unwrap();
+        assert_eq!(cfg.path, None);
+        assert!(!cfg.enabled);
     }
 }

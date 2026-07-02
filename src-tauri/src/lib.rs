@@ -7,6 +7,7 @@ mod models;
 mod search;
 mod smart_folder;
 mod thumbnail;
+mod watcher;
 
 use tauri::Manager;
 
@@ -35,6 +36,7 @@ pub fn run() {
                 db::DbState::new(&registry_path).expect("Failed to initialize database");
 
             app.manage(db_state);
+            app.manage(watcher::WatcherState::new());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -66,6 +68,10 @@ pub fn run() {
             commands::add_tags_to_items,
             commands::remove_tags_from_items,
             commands::set_items_rating,
+            commands::get_auto_import,
+            commands::set_auto_import,
+            commands::toggle_auto_import,
+            commands::clear_auto_import,
             commands::get_all_tags,
             commands::update_item,
             commands::get_tag_counts,

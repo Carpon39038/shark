@@ -11,7 +11,7 @@ import type { SearchResult } from '@/lib/types';
 import {
   Search, LayoutGrid, List,
   ChevronLeft, ChevronRight, Sidebar as SidebarIcon,
-  Image as ImageIcon, RefreshCw,
+  Image as ImageIcon, RefreshCw, Settings as SettingsIcon,
 } from 'lucide-react';
 import { TextInput } from '@/components/ui/TextInput';
 import { checkForUpdates } from '@/lib/updater';
@@ -127,6 +127,13 @@ export function Toolbar() {
           }`}
         >
           <RefreshCw size={16} className={updateChecking ? 'animate-spin' : ''} />
+        </button>
+        <button
+          onClick={() => useUiStore.getState().setSettingsOpen(true)}
+          title="设置"
+          className="p-1.5 rounded-md text-[#666666] hover:bg-gray-200 hover:text-[#1D1D1F] transition-colors duration-150"
+        >
+          <SettingsIcon size={16} />
         </button>
         <SortControl />
         <ImportButton />

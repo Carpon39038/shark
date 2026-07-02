@@ -40,33 +40,53 @@ pub fn create_library(
     name: String,
     path: String,
     state: State<'_, DbState>,
+    watcher: State<'_, crate::watcher::WatcherState>,
 ) -> Result<Library, AppError> {
     let lib = with_registry_conn(&state, |conn| db::create_library(conn, &name, &path))?;
 
     let lib_db_path = Path::new(&path).join(".shark").join("metadata.db");
     let lib_conn = db::init_library_db(&lib_db_path)?;
 
-    let mut library = state
-        .library
-        .lock()
-        .map_err(|e| AppError::Database(e.to_string()))?;
-    *library = Some(lib_conn);
+    {
+        let mut library = state
+            .library
+            .lock()
+            .map_err(|e| AppError::Database(e.to_string()))?;
+        *library = Some(lib_conn);
+    }
+
+    // A fresh library has no watched folder yet; make sure any watcher from a
+    // previously-active library is stopped now that we've switched away.
+    watcher.stop();
 
     Ok(lib)
 }
 
 #[tauri::command]
-pub fn open_library(path: String, state: State<'_, DbState>) -> Result<Library, AppError> {
+pub fn open_library(
+    path: String,
+    state: State<'_, DbState>,
+    watcher: State<'_, crate::watcher::WatcherState>,
+    app: tauri::AppHandle,
+) -> Result<Library, AppError> {
     let lib = with_registry_conn(&state, |conn| db::get_library_by_path(conn, &path))?;
 
     let lib_db_path = Path::new(&path).join(".shark").join("metadata.db");
     let lib_conn = db::init_library_db(&lib_db_path)?;
 
-    let mut library = state
-        .library
-        .lock()
-        .map_err(|e| AppError::Database(e.to_string()))?;
-    *library = Some(lib_conn);
+    // Read this library's auto-import config before handing the connection to the
+    // shared state, then (re)target the watcher for the newly-active library.
+    let config = db::get_auto_import(&lib_conn)?;
+
+    {
+        let mut library = state
+            .library
+            .lock()
+            .map_err(|e| AppError::Database(e.to_string()))?;
+        *library = Some(lib_conn);
+    }
+
+    sync_watcher(&app, &watcher, &lib.id, &config);
 
     Ok(lib)
 }
@@ -711,4 +731,104 @@ pub fn set_items_rating(
     state: State<'_, DbState>,
 ) -> Result<(), AppError> {
     with_library_conn(&state, |conn| db::set_items_rating(conn, &item_ids, rating))
+}
+
+// --- Auto-import (watched folder) ---
+
+/// Validate a candidate watched-folder path: must exist, be a directory, and be
+/// on a local drive (network/UNC paths are rejected — filesystem watching over
+/// them is unreliable).
+fn validate_watch_path(path: &str) -> Result<(), AppError> {
+    // Reject Windows UNC / network share paths (\\server\share).
+    if path.starts_with("\\\\") {
+        return Err(AppError::Import(
+            "自动导入不支持网络路径，请选择本机的文件夹。".to_string(),
+        ));
+    }
+    let p = Path::new(path);
+    if !p.exists() {
+        return Err(AppError::NotFound(format!("文件夹不存在：{path}")));
+    }
+    if !p.is_dir() {
+        return Err(AppError::Import(format!("不是文件夹：{path}")));
+    }
+    Ok(())
+}
+
+/// Apply the auto-import config for a library to the live watcher: start watching
+/// if enabled with a valid path, otherwise ensure it's stopped. Called after
+/// config changes and whenever a library is opened.
+pub fn sync_watcher(
+    app: &tauri::AppHandle,
+    watcher: &crate::watcher::WatcherState,
+    library_id: &str,
+    config: &AutoImportConfig,
+) {
+    match (config.enabled, config.path.as_deref()) {
+        (true, Some(path)) if validate_watch_path(path).is_ok() => {
+            if let Err(e) = watcher.start(app.clone(), Path::new(path), library_id.to_string()) {
+                eprintln!("Failed to start auto-import watcher: {e}");
+                watcher.stop();
+            }
+        }
+        _ => watcher.stop(),
+    }
+}
+
+#[tauri::command]
+pub fn get_auto_import(state: State<'_, DbState>) -> Result<AutoImportConfig, AppError> {
+    with_library_conn(&state, |conn| db::get_auto_import(conn))
+}
+
+#[tauri::command]
+pub fn set_auto_import(
+    path: String,
+    library_id: String,
+    state: State<'_, DbState>,
+    watcher: State<'_, crate::watcher::WatcherState>,
+    app: tauri::AppHandle,
+) -> Result<AutoImportConfig, AppError> {
+    validate_watch_path(&path)?;
+    let config = with_library_conn(&state, |conn| {
+        db::set_auto_import_path(conn, &path)?;
+        db::set_auto_import_enabled(conn, true)?;
+        db::get_auto_import(conn)
+    })?;
+    sync_watcher(&app, &watcher, &library_id, &config);
+    Ok(config)
+}
+
+#[tauri::command]
+pub fn toggle_auto_import(
+    enabled: bool,
+    library_id: String,
+    state: State<'_, DbState>,
+    watcher: State<'_, crate::watcher::WatcherState>,
+    app: tauri::AppHandle,
+) -> Result<AutoImportConfig, AppError> {
+    let config = with_library_conn(&state, |conn| {
+        // Can't enable without a folder set.
+        if enabled {
+            let existing = db::get_auto_import(conn)?;
+            if existing.path.is_none() {
+                return Err(AppError::Import(
+                    "请先选择要监视的文件夹。".to_string(),
+                ));
+            }
+        }
+        db::set_auto_import_enabled(conn, enabled)?;
+        db::get_auto_import(conn)
+    })?;
+    sync_watcher(&app, &watcher, &library_id, &config);
+    Ok(config)
+}
+
+#[tauri::command]
+pub fn clear_auto_import(
+    state: State<'_, DbState>,
+    watcher: State<'_, crate::watcher::WatcherState>,
+) -> Result<(), AppError> {
+    with_library_conn(&state, |conn| db::clear_auto_import(conn))?;
+    watcher.stop();
+    Ok(())
 }
